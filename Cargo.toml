@@ -8,7 +8,7 @@ edition = "2018"
 
 [[bin]]
 name = "ambit"
-path = "src/bin/main.rs"
+path = "src/bin/ambit/main.rs"
 
 [dependencies]
 clap = "2.33.3"
