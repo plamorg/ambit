@@ -11,3 +11,4 @@ name = "ambit"
 path = "src/bin/main.rs"
 
 [dependencies]
+clap = "2.33.3"
