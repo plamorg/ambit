@@ -80,27 +80,27 @@ pub fn init(origin: &str) {
         // Create repo directory
         // create_dir_all will handle the case where ~/.config/ambit itself doesn't exist
         fs::create_dir_all(AMBIT_PATHS.repo_dir()).expect("Could not create repo directory");
-    }
-    if !AMBIT_PATHS.config_file().is_file() {
-        // Create configuration file
-        File::create(AMBIT_PATHS.config_file()).expect("Could not create config file");
-    }
+        if !AMBIT_PATHS.config_file().is_file() {
+            // Create configuration file
+            File::create(AMBIT_PATHS.config_file()).expect("Could not create config file");
+        }
 
-    // Handle git clone
-    if origin.is_empty() {
-        // Initialize empty repository
-        git(vec!["init"]);
-    } else {
-        // Clone from origin
-        let status = Command::new("git")
-            .args(&["clone", origin, AMBIT_PATHS.repo_dir_str()])
-            .status()
-            .expect("Failed to clone repository");
-        if status.success() {
-            println!(
-                "Successfully initialized repository with origin: {}",
-                origin
-            );
+        // Handle git clone
+        if origin.is_empty() {
+            // Initialize empty repository
+            git(vec!["init"]);
+        } else {
+            // Clone from origin
+            let status = Command::new("git")
+                .args(&["clone", origin, AMBIT_PATHS.repo_dir_str()])
+                .status()
+                .expect("Failed to clone repository");
+            if status.success() {
+                println!(
+                    "Successfully initialized repository with origin: {}",
+                    origin
+                );
+            }
         }
     }
 }
