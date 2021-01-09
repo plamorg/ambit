@@ -11,7 +11,7 @@ use directories::AMBIT_PATHS;
 // Initialize config and repository directory
 fn initialize(force: bool) -> AmbitResult<()> {
     if !AMBIT_PATHS.config.exists() {
-        AMBIT_PATHS.config.create();
+        AMBIT_PATHS.config.create()?;
     }
     if AMBIT_PATHS.repo.exists() && !force {
         // Dotfile repository should not be overwritten if force is false
@@ -20,7 +20,7 @@ fn initialize(force: bool) -> AmbitResult<()> {
         ));
     } else if AMBIT_PATHS.repo.exists() {
         // Repository directory exists but force is enabled
-        AMBIT_PATHS.repo.remove();
+        AMBIT_PATHS.repo.remove()?;
     }
     Ok(())
 }
@@ -29,7 +29,7 @@ fn initialize(force: bool) -> AmbitResult<()> {
 fn init(force: bool) -> AmbitResult<()> {
     match initialize(force) {
         Ok(()) => {
-            AMBIT_PATHS.repo.create();
+            AMBIT_PATHS.repo.create()?;
             // Initialize an empty git repository
             git(vec!["init"])?;
             Ok(())
@@ -44,7 +44,7 @@ fn clone(force: bool, origin: &str) -> AmbitResult<()> {
         Ok(()) => {
             // Clone will handle creating the repository directory
             let status = Command::new("git")
-                .args(&["clone", origin, AMBIT_PATHS.repo.to_str()])
+                .args(&["clone", origin, AMBIT_PATHS.repo.to_str()?])
                 .status()?;
             if status.success() {
                 println!("Successfully cloned repository with origin: {}", origin);
@@ -71,8 +71,8 @@ fn git(arguments: Vec<&str>) -> AmbitResult<()> {
     // passed to ensure that git commands are run from the dotfile repository
     let output = Command::new("git")
         .args(&[
-            ["--git-dir=", AMBIT_PATHS.git.to_str()].concat(),
-            ["--work-tree=", AMBIT_PATHS.repo.to_str()].concat(),
+            ["--git-dir=", AMBIT_PATHS.git.to_str()?].concat(),
+            ["--work-tree=", AMBIT_PATHS.repo.to_str()?].concat(),
         ])
         .args(&arguments)
         .output()?;

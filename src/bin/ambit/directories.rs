@@ -2,6 +2,8 @@ use lazy_static::lazy_static;
 use std::fs::{self, File};
 use std::path::PathBuf;
 
+use ambit::error::{AmbitError, AmbitResult};
+
 pub enum AmbitPathKind {
     FILE,
     DIRECTORY,
@@ -24,31 +26,35 @@ impl AmbitPath {
         }
     }
 
-    pub fn to_str(&self) -> &str {
+    pub fn to_str(&self) -> AmbitResult<&str> {
         // Converts path to string slice representation
-        self.path
-            .to_str()
-            .expect("Could not yield path as &str slice")
+        let result = self.path.to_str();
+        match result {
+            Some(e) => Ok(e),
+            None => Err(AmbitError::Other(
+                "Could not yield path as &str slice".to_string(),
+            )),
+        }
     }
 
-    pub fn create(&self) {
+    pub fn create(&self) -> AmbitResult<()> {
         match self.kind {
             AmbitPathKind::FILE => {
-                File::create(&self.path).expect("Could not create file");
+                File::create(&self.path)?;
             }
             AmbitPathKind::DIRECTORY => {
-                fs::create_dir_all(&self.path).expect("Could not create directory")
+                fs::create_dir_all(&self.path)?;
             }
         };
+        Ok(())
     }
 
-    pub fn remove(&self) {
+    pub fn remove(&self) -> AmbitResult<()> {
         match self.kind {
-            AmbitPathKind::FILE => fs::remove_file(&self.path).expect("Could not remove file"),
-            AmbitPathKind::DIRECTORY => {
-                fs::remove_dir_all(&self.path).expect("Could not remove directory")
-            }
+            AmbitPathKind::FILE => fs::remove_file(&self.path)?,
+            AmbitPathKind::DIRECTORY => fs::remove_dir_all(&self.path)?,
         };
+        Ok(())
     }
 }
 
