@@ -1,46 +1,73 @@
 use lazy_static::lazy_static;
-use std::path::{Path, PathBuf};
+use std::fs::{self, File};
+use std::path::PathBuf;
+
+pub enum AmbitPathKind {
+    FILE,
+    DIRECTORY,
+}
+
+pub struct AmbitPath {
+    pub path: PathBuf,
+    kind: AmbitPathKind,
+}
+
+impl AmbitPath {
+    pub fn new(path: PathBuf, kind: AmbitPathKind) -> AmbitPath {
+        AmbitPath { path, kind }
+    }
+
+    pub fn exists(&self) -> bool {
+        match self.kind {
+            AmbitPathKind::FILE => self.path.is_file(),
+            AmbitPathKind::DIRECTORY => self.path.is_dir(),
+        }
+    }
+
+    pub fn to_str(&self) -> &str {
+        // Converts path to string slice representation
+        self.path
+            .to_str()
+            .expect("Could not yield path as &str slice")
+    }
+
+    pub fn create(&self) {
+        match self.kind {
+            AmbitPathKind::FILE => {
+                File::create(&self.path).expect("Could not create file");
+            }
+            AmbitPathKind::DIRECTORY => {
+                fs::create_dir_all(&self.path).expect("Could not create directory")
+            }
+        };
+    }
+
+    pub fn remove(&self) {
+        match self.kind {
+            AmbitPathKind::FILE => fs::remove_file(&self.path).expect("Could not remove file"),
+            AmbitPathKind::DIRECTORY => {
+                fs::remove_dir_all(&self.path).expect("Could not remove directory")
+            }
+        };
+    }
+}
 
 pub struct AmbitPaths {
-    config_file: PathBuf,
-    repo_dir: PathBuf,
-    git_dir: PathBuf,
+    pub config: AmbitPath,
+    pub repo: AmbitPath,
+    pub git: AmbitPath,
 }
 
 impl AmbitPaths {
     fn new() -> AmbitPaths {
-        let home_dir = dirs::home_dir().expect("Could not get home directory");
-        let configuration_dir = home_dir.join(".config/ambit");
-        let config_file = configuration_dir.join("config");
-        let repo_dir = configuration_dir.join("repo");
-        let git_dir = repo_dir.join(".git");
-        AmbitPaths {
-            config_file,
-            repo_dir,
-            git_dir,
-        }
-    }
+        let home = dirs::home_dir().expect("Could not get home directory");
+        let configuration = home.join(".config/ambit");
 
-    pub fn config_file(&self) -> &Path {
-        &self.config_file
-    }
+        let config = AmbitPath::new(configuration.join("config"), AmbitPathKind::FILE);
+        let repo = AmbitPath::new(configuration.join("repo"), AmbitPathKind::DIRECTORY);
+        let git = AmbitPath::new(configuration.join("repo/.git"), AmbitPathKind::DIRECTORY);
 
-    pub fn repo_dir(&self) -> &Path {
-        &self.repo_dir
-    }
-
-    pub fn repo_dir_str(&self) -> &str {
-        &self
-            .repo_dir
-            .to_str()
-            .expect("Could not yield repo directory as &str slice")
-    }
-
-    pub fn git_dir_str(&self) -> &str {
-        &self
-            .git_dir
-            .to_str()
-            .expect("Could not yield git directory as &str slice")
+        AmbitPaths { config, repo, git }
     }
 }
 

@@ -2,37 +2,45 @@ mod directories;
 
 use clap::{App, Arg, SubCommand};
 
-use std::fs::{self, File};
 use std::io::{self, Write};
 use std::process::Command;
 
 use directories::AMBIT_PATHS;
 
-pub fn init(origin: &str) {
-    // Handle file and directory creation
-    if AMBIT_PATHS.repo_dir().is_dir() {
-        // Repo path already exists
-        eprintln!(
-            "Error: Dotfile repository has already been initialized at: {}",
-            AMBIT_PATHS.repo_dir_str()
-        );
-    } else {
-        // Create repo directory
-        // create_dir_all will handle the case where ~/.config/ambit itself doesn't exist
-        fs::create_dir_all(AMBIT_PATHS.repo_dir()).expect("Could not create repo directory");
-        if !AMBIT_PATHS.config_file().is_file() {
-            // Create configuration file
-            File::create(AMBIT_PATHS.config_file()).expect("Could not create config file");
-        }
+// Initialize config and repository directory
+fn initialize(force: bool) -> Result<(), &'static str> {
+    if !AMBIT_PATHS.config.exists() {
+        AMBIT_PATHS.config.create();
+    }
+    if AMBIT_PATHS.repo.exists() && !force {
+        // Dotfile repository should not be overwritten if force is false
+        return Err("ERROR: Dotfile repository already exists.\nUse '-f' flag to overwrite.");
+    } else if AMBIT_PATHS.repo.exists() {
+        // Repository directory exists but force is enabled
+        AMBIT_PATHS.repo.remove();
+    }
+    Ok(())
+}
 
-        // Handle git clone
-        if origin.is_empty() {
-            // Initialize empty repository
+// Initialize an empty dotfile repository
+fn init(force: bool) {
+    match initialize(force) {
+        Ok(()) => {
+            AMBIT_PATHS.repo.create();
+            // Initialize an empty git repository
             git(vec!["init"]);
-        } else {
-            // Clone from origin
+        }
+        Err(e) => eprintln!("{}", e),
+    };
+}
+
+// Clone an existing dotfile repository with given origin
+fn clone(force: bool, origin: &str) {
+    match initialize(force) {
+        Ok(()) => {
+            // Clone will handle creating the repository directory
             let status = Command::new("git")
-                .args(&["clone", origin, AMBIT_PATHS.repo_dir_str()])
+                .args(&["clone", origin, AMBIT_PATHS.repo.to_str()])
                 .status()
                 .expect("Failed to clone repository");
             if status.success() {
@@ -42,19 +50,24 @@ pub fn init(origin: &str) {
                 );
             }
         }
-    }
+        Err(e) => eprintln!("{}", e),
+    };
 }
 
-pub fn validate() {
+// Parse configuration to identify files that are absent from the dotfile repository
+fn validate() {
     unimplemented!();
     // TODO: implement validate
 }
 
-pub fn git(arguments: Vec<&str>) {
+// Run git commands from the dotfile repository
+fn git(arguments: Vec<&str>) {
+    // The path to repository (git-dir) and the working tree (work-tree) is
+    // passed to ensure that git commands are run from the dotfile repository
     let output = Command::new("git")
         .args(&[
-            ["--git-dir=", AMBIT_PATHS.git_dir_str()].concat(),
-            ["--work-tree=", AMBIT_PATHS.repo_dir_str()].concat(),
+            ["--git-dir=", AMBIT_PATHS.git.to_str()].concat(),
+            ["--work-tree=", AMBIT_PATHS.repo.to_str()].concat(),
         ])
         .args(&arguments)
         .output()
@@ -64,15 +77,26 @@ pub fn git(arguments: Vec<&str>) {
 }
 
 fn main() {
+    let force_arg = Arg::with_name("force")
+        .short("f")
+        .long("force")
+        .help("Overwrite currently initialized dotfile repository");
+
     let matches = App::new("ambit")
         .about("Dotfile manager")
         .subcommand(
             SubCommand::with_name("init")
-                .about("Initializes the given origin as a dotfile repository or creates an empty")
-                .arg(Arg::with_name("ORIGIN").index(1).required(false)),
+                .about("Initialize an empty dotfile repository")
+                .arg(&force_arg),
+        )
+        .subcommand(
+            SubCommand::with_name("clone")
+                .about("Clone an existing dotfile repository with given origin")
+                .arg(&force_arg)
+                .arg(Arg::with_name("ORIGIN").index(1).required(true)),
         )
         .subcommand(SubCommand::with_name("validate").about(
-            "Parses configuration to identify files that are absent from the dotfile repository",
+            "Parse configuration to identify files that are absent from the dotfile repository",
         ))
         .subcommand(
             SubCommand::with_name("git")
@@ -82,8 +106,13 @@ fn main() {
         .get_matches();
 
     if let Some(matches) = matches.subcommand_matches("init") {
+        let force = matches.is_present("force");
+        init(force);
+    }
+    if let Some(matches) = matches.subcommand_matches("clone") {
+        let force = matches.is_present("force");
         let origin = matches.value_of("ORIGIN").unwrap_or("");
-        init(origin);
+        clone(force, origin);
     }
     if matches.is_present("validate") {
         validate();
