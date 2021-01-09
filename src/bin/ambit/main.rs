@@ -3,18 +3,21 @@ mod directories;
 use clap::{App, Arg, SubCommand};
 
 use std::io::{self, Write};
-use std::process::Command;
+use std::process::{self, Command};
 
+use ambit::error::{AmbitError, AmbitResult};
 use directories::AMBIT_PATHS;
 
 // Initialize config and repository directory
-fn initialize(force: bool) -> Result<(), &'static str> {
+fn initialize(force: bool) -> AmbitResult<()> {
     if !AMBIT_PATHS.config.exists() {
         AMBIT_PATHS.config.create();
     }
     if AMBIT_PATHS.repo.exists() && !force {
         // Dotfile repository should not be overwritten if force is false
-        return Err("ERROR: Dotfile repository already exists.\nUse '-f' flag to overwrite.");
+        return Err(AmbitError::Other(
+            "Dotfile repository already exists.\nUse '-f' flag to overwrite.".to_string(),
+        ));
     } else if AMBIT_PATHS.repo.exists() {
         // Repository directory exists but force is enabled
         AMBIT_PATHS.repo.remove();
@@ -23,45 +26,47 @@ fn initialize(force: bool) -> Result<(), &'static str> {
 }
 
 // Initialize an empty dotfile repository
-fn init(force: bool) {
+fn init(force: bool) -> AmbitResult<()> {
     match initialize(force) {
         Ok(()) => {
             AMBIT_PATHS.repo.create();
             // Initialize an empty git repository
-            git(vec!["init"]);
+            git(vec!["init"])?;
+            Ok(())
         }
-        Err(e) => eprintln!("{}", e),
-    };
+        Err(e) => Err(e),
+    }
 }
 
 // Clone an existing dotfile repository with given origin
-fn clone(force: bool, origin: &str) {
+fn clone(force: bool, origin: &str) -> AmbitResult<()> {
     match initialize(force) {
         Ok(()) => {
             // Clone will handle creating the repository directory
             let status = Command::new("git")
                 .args(&["clone", origin, AMBIT_PATHS.repo.to_str()])
-                .status()
-                .expect("Failed to clone repository");
+                .status()?;
             if status.success() {
-                println!(
-                    "Successfully initialized repository with origin: {}",
-                    origin
-                );
+                println!("Successfully cloned repository with origin: {}", origin);
+                return Ok(());
             }
+            Err(AmbitError::Other(format!(
+                "Failed to clone repository with origin: {}",
+                origin
+            )))
         }
-        Err(e) => eprintln!("{}", e),
-    };
+        Err(e) => Err(e),
+    }
 }
 
 // Parse configuration to identify files that are absent from the dotfile repository
-fn validate() {
+fn validate() -> AmbitResult<()> {
     unimplemented!();
     // TODO: implement validate
 }
 
 // Run git commands from the dotfile repository
-fn git(arguments: Vec<&str>) {
+fn git(arguments: Vec<&str>) -> AmbitResult<()> {
     // The path to repository (git-dir) and the working tree (work-tree) is
     // passed to ensure that git commands are run from the dotfile repository
     let output = Command::new("git")
@@ -70,13 +75,13 @@ fn git(arguments: Vec<&str>) {
             ["--work-tree=", AMBIT_PATHS.repo.to_str()].concat(),
         ])
         .args(&arguments)
-        .output()
-        .expect("Failed to execute git command");
-    io::stdout().write_all(&output.stdout).unwrap();
-    io::stdout().write_all(&output.stderr).unwrap();
+        .output()?;
+    io::stdout().write_all(&output.stdout)?;
+    io::stdout().write_all(&output.stderr)?;
+    Ok(())
 }
 
-fn main() {
+fn run() -> AmbitResult<bool> {
     let force_arg = Arg::with_name("force")
         .short("f")
         .long("force")
@@ -107,18 +112,35 @@ fn main() {
 
     if let Some(matches) = matches.subcommand_matches("init") {
         let force = matches.is_present("force");
-        init(force);
+        init(force)?;
     }
     if let Some(matches) = matches.subcommand_matches("clone") {
         let force = matches.is_present("force");
         let origin = matches.value_of("ORIGIN").unwrap_or("");
-        clone(force, origin);
+        clone(force, origin)?;
     }
     if matches.is_present("validate") {
-        validate();
+        validate()?;
     }
     if let Some(matches) = matches.subcommand_matches("git") {
         let git_arguments: Vec<_> = matches.values_of("GIT_ARGUMENTS").unwrap().collect();
-        git(git_arguments);
+        git(git_arguments)?;
+    }
+    Ok(true)
+}
+
+fn main() {
+    let result = run();
+    match result {
+        Err(error) => {
+            // TODO: Use default error handler function
+            eprintln!("ERROR: {}", error);
+        }
+        Ok(false) => {
+            process::exit(1);
+        }
+        Ok(true) => {
+            process::exit(0);
+        }
     }
 }
