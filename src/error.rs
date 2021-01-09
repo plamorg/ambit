@@ -36,8 +36,6 @@ impl<'a> From<&'a str> for AmbitError {
 }
 
 // Report given error
-#[allow(dead_code)]
-fn normal_error_handler(_error: &AmbitError) {
-    // TODO: implement normal error handler
-    unimplemented!();
+pub fn default_error_handler(error: &AmbitError) {
+    eprintln!("ERROR: {}", error);
 }

@@ -5,7 +5,7 @@ use clap::{App, Arg, SubCommand};
 use std::io::{self, Write};
 use std::process::{self, Command};
 
-use ambit::error::{AmbitError, AmbitResult};
+use ambit::error::{self, AmbitError, AmbitResult};
 use directories::AMBIT_PATHS;
 
 // Initialize config and repository directory
@@ -133,8 +133,7 @@ fn main() {
     let result = run();
     match result {
         Err(error) => {
-            // TODO: Use default error handler function
-            eprintln!("ERROR: {}", error);
+            error::default_error_handler(&error);
         }
         Ok(false) => {
             process::exit(1);
