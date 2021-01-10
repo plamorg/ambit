@@ -4,11 +4,13 @@ use std::path::PathBuf;
 
 use ambit::error::{AmbitError, AmbitResult};
 
+#[derive(PartialEq, Eq, Debug)]
 pub enum AmbitPathKind {
     FILE,
     DIRECTORY,
 }
 
+#[derive(PartialEq, Eq, Debug)]
 pub struct AmbitPath {
     pub path: PathBuf,
     kind: AmbitPathKind,
