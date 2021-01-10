@@ -1,3 +1,4 @@
+use std::process;
 use std::{fmt, io};
 
 pub type AmbitResult<T> = Result<T, AmbitError>;
@@ -38,4 +39,5 @@ impl<'a> From<&'a str> for AmbitError {
 // Report given error
 pub fn default_error_handler(error: &AmbitError) {
     eprintln!("ERROR: {}", error);
+    process::exit(1);
 }
