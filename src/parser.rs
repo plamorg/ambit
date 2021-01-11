@@ -152,21 +152,21 @@ impl Spec {
                 iter.next()
                     .unwrap()
                     .string
-                    .expect("Internal error: string expected!")
+                    .expect("Internal error: string expected!"),
             );
         }
         fn probably_ends_spec<I: Iterator<Item = Token>>(iter: &mut Peekable<I>) -> bool {
             // Check if the iterator "probably ends" here,
             // or we need to do another round of parsing.
-            ends!(iter) || 
-            iter
-                .peek()
-                .map(|next| {
-                    [TokType::Semicolon, TokType::MapsTo]
-                        .iter()
-                        .any(|x| next.toktype == *x)
-                })
-                .unwrap_or(false)
+            ends!(iter)
+                || iter
+                    .peek()
+                    .map(|next| {
+                        [TokType::Semicolon, TokType::MapsTo]
+                            .iter()
+                            .any(|x| next.toktype == *x)
+                    })
+                    .unwrap_or(false)
         }
         // optimization
         match iter.peek() {
