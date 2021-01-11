@@ -41,3 +41,20 @@ pub fn default_error_handler(error: &AmbitError) {
     eprintln!("ERROR: {}", error);
     process::exit(1);
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn display_io() {
+        let err = AmbitError::Io(io::Error::new(io::ErrorKind::NotFound, "File not found"));
+        assert_eq!(format!("{}", err), "File not found");
+    }
+
+    #[test]
+    fn display_other() {
+        let err = AmbitError::Other("Error message".to_string());
+        assert_eq!(format!("{}", err), "Error message");
+    }
+}
