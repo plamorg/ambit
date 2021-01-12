@@ -6,8 +6,8 @@ use ambit::error::{AmbitError, AmbitResult};
 
 #[derive(PartialEq, Eq, Debug)]
 pub enum AmbitPathKind {
-    FILE,
-    DIRECTORY,
+    File,
+    Directory,
 }
 
 #[derive(PartialEq, Eq, Debug)]
@@ -23,8 +23,8 @@ impl AmbitPath {
 
     pub fn exists(&self) -> bool {
         match self.kind {
-            AmbitPathKind::FILE => self.path.is_file(),
-            AmbitPathKind::DIRECTORY => self.path.is_dir(),
+            AmbitPathKind::File => self.path.is_file(),
+            AmbitPathKind::Directory => self.path.is_dir(),
         }
     }
 
@@ -41,10 +41,10 @@ impl AmbitPath {
 
     pub fn create(&self) -> AmbitResult<()> {
         match self.kind {
-            AmbitPathKind::FILE => {
+            AmbitPathKind::File => {
                 File::create(&self.path)?;
             }
-            AmbitPathKind::DIRECTORY => {
+            AmbitPathKind::Directory => {
                 fs::create_dir_all(&self.path)?;
             }
         };
@@ -53,8 +53,8 @@ impl AmbitPath {
 
     pub fn remove(&self) -> AmbitResult<()> {
         match self.kind {
-            AmbitPathKind::FILE => fs::remove_file(&self.path)?,
-            AmbitPathKind::DIRECTORY => fs::remove_dir_all(&self.path)?,
+            AmbitPathKind::File => fs::remove_file(&self.path)?,
+            AmbitPathKind::Directory => fs::remove_dir_all(&self.path)?,
         };
         Ok(())
     }
@@ -71,9 +71,9 @@ impl AmbitPaths {
         let home = dirs::home_dir().expect("Could not get home directory");
         let configuration = home.join(".config/ambit");
 
-        let config = AmbitPath::new(configuration.join("config"), AmbitPathKind::FILE);
-        let repo = AmbitPath::new(configuration.join("repo"), AmbitPathKind::DIRECTORY);
-        let git = AmbitPath::new(configuration.join("repo/.git"), AmbitPathKind::DIRECTORY);
+        let config = AmbitPath::new(configuration.join("config"), AmbitPathKind::File);
+        let repo = AmbitPath::new(configuration.join("repo"), AmbitPathKind::Directory);
+        let git = AmbitPath::new(configuration.join("repo/.git"), AmbitPathKind::Directory);
 
         AmbitPaths { config, repo, git }
     }
