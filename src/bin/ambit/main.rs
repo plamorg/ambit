@@ -1,6 +1,6 @@
 mod directories;
 
-use clap::{App, Arg, SubCommand};
+use clap::{App, AppSettings, Arg, SubCommand};
 
 use std::process;
 
@@ -97,6 +97,7 @@ fn run() -> AmbitResult<()> {
 
     let matches = App::new("ambit")
         .about("Dotfile manager")
+        .setting(AppSettings::ArgRequiredElseHelp)
         .subcommand(
             SubCommand::with_name("init")
                 .about("Initialize an empty dotfile repository")
