@@ -56,7 +56,7 @@ impl<'a, I: Iterator<Item = char>> Iterator for Lexer<'a, I> {
             let mut ret = start.to_string();
             while iter
                 .peek()
-                .map(|c| !c.is_ascii_whitespace())
+                .map(|c| !c.is_ascii_whitespace() && !['{', '}', '[', ']', ',', ';', ':', '='].iter().any(|e| e == c))
                 .unwrap_or(false)
             {
                 ret.push(iter.next().unwrap());
@@ -98,15 +98,16 @@ impl<'a, I: Iterator<Item = char>> Iterator for Lexer<'a, I> {
     }
 }
 
-#[test]
-fn test_lexer() {
-    fn check(s: &str, t: Vec<Token>) {
-        let mut chars = s.chars().peekable();
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn check_lexer_output(input: &str, expected: Vec<Token>) {
+        let mut chars = input.chars().peekable();
         let lex = Lexer::new(&mut chars);
-        let res = lex.collect::<Vec<Token>>();
-        if res != t {
-            panic!("Failed test with {}:\n{:?}\n!=\n{:?}", s, res, t);
-        }
+        lex.zip(expected.iter()).enumerate().for_each(|(idx, (out, ex_out))| {
+            assert!(out == *ex_out, "Not equal at position {}:\n`{:?}`\n!=\n`{:?}`", idx, out, ex_out);
+        });
     }
 
     macro_rules! tok {
@@ -118,32 +119,81 @@ fn test_lexer() {
         };
     }
 
-    check(
-        "~/.config/nvim/init.vim => init.vim",
-        vec![
-            tok!("~/.config/nvim/init.vim", 1),
-            tok!(MapsTo, 1),
-            tok!("init.vim", 1),
-        ],
-    );
+    #[test]
+    fn full_example_config() {
+        check_lexer_output(
+            "\
+~/.config/nvim/init.vim => config.nvim;
+~/{
+    windows: _config,
+    default: .config
+}/rofi.rasi;
+/etc/fonts/local.conf => local.conf;
+", 
+            vec![
+                tok!("~/.config/nvim/init.vim", 1),
+                tok!(MapsTo, 1),
+                tok!("config.nvim", 1),
+                tok!(Semicolon, 1),
+                tok!("~/", 2),
+                tok!(LBrace, 2),
+                tok!("windows", 3),
+                tok!(Colon, 3),
+                tok!("_config", 3),
+                tok!(Comma, 3),
+                tok!("default", 4),
+                tok!(Colon, 4),
+                tok!(".config", 4),
+                tok!(RBrace, 5),
+                tok!("/rofi.rasi", 5),
+                tok!(Semicolon, 5),
+                tok!("/etc/fonts/local.conf", 6),
+                tok!(MapsTo, 6),
+                tok!("local.conf", 6),
+                tok!(Semicolon, 6)
+            ]
+        );
+    }
 
-    check(
-        "ok then \n \t\t\t\t\tpls",
-        vec![tok!("ok", 1), tok!("then", 1), tok!("pls", 2)],
-    );
+    #[test]
+    fn single_statement() {
+        check_lexer_output(
+            "/etc/conf.d/minecraft => ~/.mc.conf;",
+            vec![
+                tok!("/etc/conf.d/minecraft", 1),
+                tok!(MapsTo, 1),
+                tok!("~/.mc.conf", 1),
+                tok!(Semicolon, 1)
+            ]
+        );
+    }
 
-    check(
-        "{ }\n [ ]\n ; \n =>\t\n = >\n ,\n",
-        vec![
-            tok!(LBrace, 1),
-            tok!(RBrace, 1),
-            tok!(LBracket, 2),
-            tok!(RBracket, 2),
-            tok!(Semicolon, 3),
-            tok!(MapsTo, 4),
-            tok!("=", 5),
-            tok!(">", 5),
-            tok!(Comma, 6),
-        ],
-    );
+    #[test]
+    fn excessive_whitespace() {
+        check_lexer_output(
+            "check\t\r\n\r\r            \nq",
+            vec![
+                tok!("check", 1),
+                tok!("q", 3)
+            ]
+        );
+    }
+
+    #[test]
+    fn all_symbols() {
+        check_lexer_output(
+            "{ }\n [ ]\n ; \n =>\t\n = >\n ,\n",
+            vec![
+                tok!(LBrace, 1),
+                tok!(RBrace, 1),
+                tok!(LBracket, 2),
+                tok!(RBracket, 2),
+                tok!(Semicolon, 3),
+                tok!(MapsTo, 4),
+                tok!("=", 5),
+                tok!(">", 5),
+                tok!(Comma, 6),
+            ],
+        );
+    }
 }

@@ -325,8 +325,11 @@ impl Expr {
     }
 }
 
-#[test]
-fn test_parser() {
+#[cfg(test)]
+mod tests {
+
+    use super::*;
+
     // Makes it more convenient to write token lists.
     macro_rules! toklist {
         [$($i:expr),+] => {
@@ -365,51 +368,59 @@ fn test_parser() {
         assert_eq!(err, res);
     }
 
-    success(
-        &toklist!["yes", TokType::Semicolon],
-        &[Entry {
-            left: Spec {
-                string: Some("yes".to_owned()),
-                spectype: SpecType::None,
-            },
-            right: None,
-        }],
-    );
+    #[test]
+    fn basic_entry() {
+        success(
+            &toklist!["yes", TokType::Semicolon],
+            &[Entry {
+                left: Spec {
+                    string: Some("yes".to_owned()),
+                    spectype: SpecType::None,
+                },
+                right: None,
+            }],
+        );
+    }
 
-    success(
-        &toklist![
+    #[test]
+    fn choice_expr_basic() {
+        success(
+            &toklist![
             TokType::LBracket,
             "a",
             TokType::Comma,
             "b",
             TokType::RBracket,
             TokType::Semicolon
-        ],
-        &[Entry {
-            left: Spec {
-                string: None,
-                spectype: SpecType::Choice(
-                    Box::new(ChoiceExpr {
-                        specs: vec![
-                            Spec {
-                                string: Some("a".to_owned()),
-                                spectype: SpecType::None,
-                            },
-                            Spec {
-                                string: Some("b".to_owned()),
-                                spectype: SpecType::None,
-                            },
-                        ],
-                    }),
-                    None,
-                ),
-            },
-            right: None,
-        }],
-    );
+            ],
+            &[Entry {
+                left: Spec {
+                    string: None,
+                    spectype: SpecType::Choice(
+                        Box::new(ChoiceExpr {
+                            specs: vec![
+                                Spec {
+                                    string: Some("a".to_owned()),
+                                    spectype: SpecType::None,
+                                },
+                                Spec {
+                                    string: Some("b".to_owned()),
+                                    spectype: SpecType::None,
+                                },
+                            ],
+                        }),
+                        None,
+                    ),
+                },
+                right: None,
+            }],
+            );
+    }
 
-    success(
-        &toklist![
+    #[test]
+    fn comp_expr_basic() {
+        success(
+            &toklist![
             TokType::LBrace,
             "windows",
             TokType::Colon,
@@ -421,38 +432,42 @@ fn test_parser() {
             TokType::RBrace,
             "c",
             TokType::Semicolon
-        ],
-        &[Entry {
-            left: Spec {
-                string: None,
-                spectype: SpecType::Comp(
-                    Box::new(CompExpr {
-                        cases: vec![(
-                            Expr {
-                                exprtype: ExprType::Windows,
-                            },
-                            Spec {
-                                string: Some("a".to_owned()),
-                                spectype: SpecType::None,
-                            },
-                        )],
-                        default: Spec {
-                            string: Some("b".to_owned()),
+            ],
+            &[Entry {
+                left: Spec {
+                    string: None,
+                    spectype: SpecType::Comp(
+                        Box::new(CompExpr {
+                            cases: vec![(
+                                       Expr {
+                                           exprtype: ExprType::Windows,
+                                       },
+                                       Spec {
+                                           string: Some("a".to_owned()),
+                                           spectype: SpecType::None,
+                                       },
+                                   )],
+                                   default: Spec {
+                                       string: Some("b".to_owned()),
+                                       spectype: SpecType::None,
+                                   },
+                        }),
+                        Some(Box::new(Spec {
+                            string: Some("c".to_owned()),
                             spectype: SpecType::None,
-                        },
-                    }),
-                    Some(Box::new(Spec {
-                        string: Some("c".to_owned()),
-                        spectype: SpecType::None,
-                    })),
-                ),
-            },
-            right: None,
-        }],
-    );
+                        })),
+                    ),
+                },
+                right: None,
+            }],
+            );
 
-    success(
-        &toklist![
+    }
+
+    #[test]
+    fn multiple_exprs() {
+        success(
+            &toklist![
             "examples of ",
             TokType::LBracket,
             "gui",
@@ -466,47 +481,51 @@ fn test_parser() {
             "ed",
             TokType::RBracket,
             TokType::Semicolon
-        ],
-        &[Entry {
-            left: Spec {
-                string: Some("examples of ".to_owned()),
-                spectype: SpecType::Choice(
-                    Box::new(ChoiceExpr {
-                        specs: vec![
-                            (Spec {
-                                string: Some("gui".to_owned()),
-                                spectype: SpecType::None,
-                            }),
-                            (Spec {
-                                string: Some("cli".to_owned()),
-                                spectype: SpecType::None,
-                            }),
-                        ],
-                    }),
-                    None,
-                ),
-            },
-            right: Some(Spec {
-                string: None,
-                spectype: SpecType::Choice(
-                    Box::new(ChoiceExpr {
-                        specs: vec![
-                            (Spec {
-                                string: Some("gvim".to_owned()),
-                                spectype: SpecType::None,
-                            }),
-                            (Spec {
-                                string: Some("ed".to_owned()),
-                                spectype: SpecType::None,
-                            }),
-                        ],
-                    }),
-                    None,
-                ),
-            }),
-        }],
-    );
+            ],
+            &[Entry {
+                left: Spec {
+                    string: Some("examples of ".to_owned()),
+                    spectype: SpecType::Choice(
+                        Box::new(ChoiceExpr {
+                            specs: vec![
+                                (Spec {
+                                    string: Some("gui".to_owned()),
+                                    spectype: SpecType::None,
+                                }),
+                                (Spec {
+                                    string: Some("cli".to_owned()),
+                                    spectype: SpecType::None,
+                                }),
+                            ],
+                        }),
+                        None,
+                    ),
+                },
+                right: Some(Spec {
+                    string: None,
+                    spectype: SpecType::Choice(
+                        Box::new(ChoiceExpr {
+                            specs: vec![
+                                (Spec {
+                                    string: Some("gvim".to_owned()),
+                                    spectype: SpecType::None,
+                                }),
+                                (Spec {
+                                    string: Some("ed".to_owned()),
+                                    spectype: SpecType::None,
+                                }),
+                            ],
+                        }),
+                        None,
+                    ),
+                }),
+            }],
+            );
+    }
 
-    fail(&toklist!["a"], ParseError::Expected(&[TokType::Semicolon]));
+    #[test]
+    fn semicolon_error() {
+        fail(&toklist!["a"], ParseError::Expected(&[TokType::Semicolon]));
+    }
     // TODO: add more tests
 }
