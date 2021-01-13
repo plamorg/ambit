@@ -108,9 +108,10 @@ impl Entry {
     }
 }
 
+// A `Spec` specifies a fragment of a path, e.g. "~/.config/[nvim/init.vim, spectrwm.conf]".
 /* spec -> str
- *      -> str? choice-expr spec?
- *      -> str? comp-expr spec?
+ *      -> str? variant-expr spec?
+ *      -> str? match-expr spec?
  */
 #[derive(PartialEq, Eq, Debug, Clone)]
 struct Spec {
@@ -120,8 +121,8 @@ struct Spec {
 #[derive(PartialEq, Eq, Debug, Clone)]
 enum SpecType {
     None,
-    Choice(Box<ChoiceExpr>, Option<Box<Spec>>),
-    Comp(Box<CompExpr>, Option<Box<Spec>>),
+    Variant(Box<VariantExpr>, Option<Box<Spec>>),
+    Match(Box<MatchExpr>, Option<Box<Spec>>),
 }
 impl Spec {
     /* Returns None if the nr. of options
@@ -130,8 +131,8 @@ impl Spec {
     pub fn nr_of_options(&self) -> Option<usize> {
         match &self.spectype {
             SpecType::None => Some(1),
-            SpecType::Comp(_, spec) => spec.as_ref().map(|s| s.nr_of_options()).unwrap_or(Some(1)),
-            SpecType::Choice(expr, spec) => {
+            SpecType::Match(_, spec) => spec.as_ref().map(|s| s.nr_of_options()).unwrap_or(Some(1)),
+            SpecType::Variant(expr, spec) => {
                 let exprnr = expr.nr_of_options()?;
                 let specnr = spec
                     .as_ref()
@@ -175,8 +176,8 @@ impl Spec {
                 TokType::LBrace => {
                     return Ok(Spec {
                         string,
-                        spectype: SpecType::Comp(
-                            Box::new(CompExpr::parse(iter)?),
+                        spectype: SpecType::Match(
+                            Box::new(MatchExpr::parse(iter)?),
                             // If we didn't do this hack,
                             // the grammar wouldn't be LL(1).
                             {
@@ -194,7 +195,7 @@ impl Spec {
                 TokType::LBracket => {
                     return Ok(Spec {
                         string,
-                        spectype: SpecType::Choice(Box::new(ChoiceExpr::parse(iter)?), {
+                        spectype: SpecType::Variant(Box::new(VariantExpr::parse(iter)?), {
                             if probably_ends_spec(iter) {
                                 // It ends here.
                                 None
@@ -219,12 +220,12 @@ impl Spec {
     }
 }
 
-// choice-expr -> [ spec (, spec)* ]
+// variant-expr -> [ spec (, spec)* ]
 #[derive(PartialEq, Eq, Debug, Clone)]
-struct ChoiceExpr {
+struct VariantExpr {
     specs: Vec<Spec>,
 }
-impl ChoiceExpr {
+impl VariantExpr {
     // Returns None if the nr of options is larger than usize::MAX.
     pub fn nr_of_options(&self) -> Option<usize> {
         self.specs.iter().try_fold(0usize, |nr, spec| {
@@ -232,7 +233,7 @@ impl ChoiceExpr {
                 .and_then(|specnr| specnr.checked_add(nr))
         })
     }
-    pub fn parse<I: Iterator<Item = Token>>(iter: &mut Peekable<I>) -> Result<ChoiceExpr> {
+    pub fn parse<I: Iterator<Item = Token>>(iter: &mut Peekable<I>) -> Result<VariantExpr> {
         expect!(iter, [TokType::LBracket]);
         // Better error message.
         if iter
@@ -250,24 +251,25 @@ impl ChoiceExpr {
             }
         }
         expect!(iter, [TokType::RBracket]);
-        Ok(ChoiceExpr { specs })
+        Ok(VariantExpr { specs })
     }
 }
 
-// choice-expr -> { (expr ":" spec ":")* "default" ":" spec }
+// Matches, based on the expr, which spec to produce.
+// match-expr -> { (expr ":" spec ":")* "default" ":" spec }
 #[derive(PartialEq, Eq, Debug, Clone)]
-struct CompExpr {
+struct MatchExpr {
     cases: Vec<(Expr, Spec)>,
     default: Spec,
 }
-impl CompExpr {
-    pub fn parse<I: Iterator<Item = Token>>(iter: &mut Peekable<I>) -> Result<CompExpr> {
+impl MatchExpr {
+    pub fn parse<I: Iterator<Item = Token>>(iter: &mut Peekable<I>) -> Result<MatchExpr> {
         expect!(iter, [TokType::LBrace]);
         let mut cases = Vec::new();
         loop {
             if eat!(iter, "default") {
                 expect!(iter, [TokType::Colon]);
-                let ret = CompExpr {
+                let ret = MatchExpr {
                     cases,
                     default: Spec::parse(iter)?,
                 };
@@ -307,19 +309,19 @@ impl Expr {
                 })
             }};
         }
-        match iter.peek() {
-            Some(tok) if tok.toktype == TokType::Str => match tok.string.as_ref() {
-                None => {}
-                Some(s) => match s.as_str() {
-                    "windows" => return exprtype!(Windows),
-                    "macos" => return exprtype!(Macos),
-                    "linux" => return exprtype!(Linux),
-                    "unix" => return exprtype!(Unix),
-                    "bsd" => return exprtype!(Bsd),
-                    _ => {}
-                },
-            },
-            _ => {}
+        if let Some(tok) = iter.peek() {
+            if tok.toktype == TokType::Str {
+                if let Some(s) = tok.string.as_ref() {
+                    match s.as_str() {
+                        "windows" => return exprtype!(Windows),
+                        "macos" => return exprtype!(Macos),
+                        "linux" => return exprtype!(Linux),
+                        "unix" => return exprtype!(Unix),
+                        "bsd" => return exprtype!(Bsd),
+                        _ => {}
+                    }
+                }
+            }
         }
         Err(ParseError::Expected(&[TokType::Str]))
     }
@@ -396,8 +398,8 @@ mod tests {
             &[Entry {
                 left: Spec {
                     string: None,
-                    spectype: SpecType::Choice(
-                        Box::new(ChoiceExpr {
+                    spectype: SpecType::Variant(
+                        Box::new(VariantExpr {
                             specs: vec![
                                 Spec {
                                     string: Some("a".to_owned()),
@@ -436,8 +438,8 @@ mod tests {
             &[Entry {
                 left: Spec {
                     string: None,
-                    spectype: SpecType::Comp(
-                        Box::new(CompExpr {
+                    spectype: SpecType::Match(
+                        Box::new(MatchExpr {
                             cases: vec![(
                                 Expr {
                                     exprtype: ExprType::Windows,
@@ -484,8 +486,8 @@ mod tests {
             &[Entry {
                 left: Spec {
                     string: Some("examples of ".to_owned()),
-                    spectype: SpecType::Choice(
-                        Box::new(ChoiceExpr {
+                    spectype: SpecType::Variant(
+                        Box::new(VariantExpr {
                             specs: vec![
                                 (Spec {
                                     string: Some("gui".to_owned()),
@@ -502,8 +504,8 @@ mod tests {
                 },
                 right: Some(Spec {
                     string: None,
-                    spectype: SpecType::Choice(
-                        Box::new(ChoiceExpr {
+                    spectype: SpecType::Variant(
+                        Box::new(VariantExpr {
                             specs: vec![
                                 (Spec {
                                     string: Some("gvim".to_owned()),

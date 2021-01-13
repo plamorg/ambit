@@ -3,8 +3,10 @@ use std::iter::Peekable;
 #[derive(PartialEq, Eq, Debug, Clone, Copy)]
 pub enum TokType {
     Str,
+    // "Brace" refers to curly braces: { and }.
     RBrace,
     LBrace,
+    // "Bracket" refers to square brackets: [ and ].
     RBracket,
     LBracket,
     MapsTo,
