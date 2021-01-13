@@ -386,12 +386,12 @@ mod tests {
     fn choice_expr_basic() {
         success(
             &toklist![
-            TokType::LBracket,
-            "a",
-            TokType::Comma,
-            "b",
-            TokType::RBracket,
-            TokType::Semicolon
+                TokType::LBracket,
+                "a",
+                TokType::Comma,
+                "b",
+                TokType::RBracket,
+                TokType::Semicolon
             ],
             &[Entry {
                 left: Spec {
@@ -414,24 +414,24 @@ mod tests {
                 },
                 right: None,
             }],
-            );
+        );
     }
 
     #[test]
     fn comp_expr_basic() {
         success(
             &toklist![
-            TokType::LBrace,
-            "windows",
-            TokType::Colon,
-            "a",
-            TokType::Comma,
-            "default",
-            TokType::Colon,
-            "b",
-            TokType::RBrace,
-            "c",
-            TokType::Semicolon
+                TokType::LBrace,
+                "windows",
+                TokType::Colon,
+                "a",
+                TokType::Comma,
+                "default",
+                TokType::Colon,
+                "b",
+                TokType::RBrace,
+                "c",
+                TokType::Semicolon
             ],
             &[Entry {
                 left: Spec {
@@ -439,18 +439,18 @@ mod tests {
                     spectype: SpecType::Comp(
                         Box::new(CompExpr {
                             cases: vec![(
-                                       Expr {
-                                           exprtype: ExprType::Windows,
-                                       },
-                                       Spec {
-                                           string: Some("a".to_owned()),
-                                           spectype: SpecType::None,
-                                       },
-                                   )],
-                                   default: Spec {
-                                       string: Some("b".to_owned()),
-                                       spectype: SpecType::None,
-                                   },
+                                Expr {
+                                    exprtype: ExprType::Windows,
+                                },
+                                Spec {
+                                    string: Some("a".to_owned()),
+                                    spectype: SpecType::None,
+                                },
+                            )],
+                            default: Spec {
+                                string: Some("b".to_owned()),
+                                spectype: SpecType::None,
+                            },
                         }),
                         Some(Box::new(Spec {
                             string: Some("c".to_owned()),
@@ -460,27 +460,26 @@ mod tests {
                 },
                 right: None,
             }],
-            );
-
+        );
     }
 
     #[test]
     fn multiple_exprs() {
         success(
             &toklist![
-            "examples of ",
-            TokType::LBracket,
-            "gui",
-            TokType::Comma,
-            "cli",
-            TokType::RBracket,
-            TokType::MapsTo,
-            TokType::LBracket,
-            "gvim",
-            TokType::Comma,
-            "ed",
-            TokType::RBracket,
-            TokType::Semicolon
+                "examples of ",
+                TokType::LBracket,
+                "gui",
+                TokType::Comma,
+                "cli",
+                TokType::RBracket,
+                TokType::MapsTo,
+                TokType::LBracket,
+                "gvim",
+                TokType::Comma,
+                "ed",
+                TokType::RBracket,
+                TokType::Semicolon
             ],
             &[Entry {
                 left: Spec {
@@ -520,7 +519,7 @@ mod tests {
                     ),
                 }),
             }],
-            );
+        );
     }
 
     #[test]

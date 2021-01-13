@@ -56,7 +56,12 @@ impl<'a, I: Iterator<Item = char>> Iterator for Lexer<'a, I> {
             let mut ret = start.to_string();
             while iter
                 .peek()
-                .map(|c| !c.is_ascii_whitespace() && !['{', '}', '[', ']', ',', ';', ':', '='].iter().any(|e| e == c))
+                .map(|c| {
+                    !c.is_ascii_whitespace()
+                        && !['{', '}', '[', ']', ',', ';', ':', '=']
+                            .iter()
+                            .any(|e| e == c)
+                })
                 .unwrap_or(false)
             {
                 ret.push(iter.next().unwrap());
@@ -105,9 +110,17 @@ mod tests {
     fn check_lexer_output(input: &str, expected: Vec<Token>) {
         let mut chars = input.chars().peekable();
         let lex = Lexer::new(&mut chars);
-        lex.zip(expected.iter()).enumerate().for_each(|(idx, (out, ex_out))| {
-            assert!(out == *ex_out, "Not equal at position {}:\n`{:?}`\n!=\n`{:?}`", idx, out, ex_out);
-        });
+        lex.zip(expected.iter())
+            .enumerate()
+            .for_each(|(idx, (out, ex_out))| {
+                assert!(
+                    out == *ex_out,
+                    "Not equal at position {}:\n`{:?}`\n!=\n`{:?}`",
+                    idx,
+                    out,
+                    ex_out
+                );
+            });
     }
 
     macro_rules! tok {
@@ -129,7 +142,7 @@ mod tests {
     default: .config
 }/rofi.rasi;
 /etc/fonts/local.conf => local.conf;
-", 
+",
             vec![
                 tok!("~/.config/nvim/init.vim", 1),
                 tok!(MapsTo, 1),
@@ -150,8 +163,8 @@ mod tests {
                 tok!("/etc/fonts/local.conf", 6),
                 tok!(MapsTo, 6),
                 tok!("local.conf", 6),
-                tok!(Semicolon, 6)
-            ]
+                tok!(Semicolon, 6),
+            ],
         );
     }
 
@@ -163,8 +176,8 @@ mod tests {
                 tok!("/etc/conf.d/minecraft", 1),
                 tok!(MapsTo, 1),
                 tok!("~/.mc.conf", 1),
-                tok!(Semicolon, 1)
-            ]
+                tok!(Semicolon, 1),
+            ],
         );
     }
 
@@ -172,10 +185,7 @@ mod tests {
     fn excessive_whitespace() {
         check_lexer_output(
             "check\t\r\n\r\r            \nq",
-            vec![
-                tok!("check", 1),
-                tok!("q", 3)
-            ]
+            vec![tok!("check", 1), tok!("q", 3)],
         );
     }
 
