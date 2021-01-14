@@ -55,21 +55,18 @@ impl<'a, I: Iterator<Item = char>> Iterator for Lexer<'a, I> {
     type Item = Token;
     fn next(&mut self) -> Option<Self::Item> {
         fn proc_str<I: Iterator<Item = char>>(iter: &mut Peekable<I>, start: char) -> String {
+            fn is_ending_char(c: char) -> bool {
+                c.is_ascii_whitespace()
+                    || ['{', '}', '[', ']', ',', ';', ':', '=']
+                        .iter()
+                        .any(|e| *e == c)
+            }
             let mut ret = start.to_string();
             loop {
                 if iter.peek().map(|&c| c == '\\').unwrap_or(false) {
                     iter.next();
                     ret.push(iter.next().unwrap_or('\\'));
-                } else if iter
-                    .peek()
-                    .map(|c| {
-                        !c.is_ascii_whitespace()
-                            && !['{', '}', '[', ']', ',', ';', ':', '=']
-                                .iter()
-                                .any(|e| e == c)
-                    })
-                    .unwrap_or(false)
-                {
+                } else if iter.peek().map(|&c| !is_ending_char(c)).unwrap_or(false) {
                     ret.push(iter.next().unwrap());
                 } else {
                     break;
