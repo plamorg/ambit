@@ -1,4 +1,4 @@
-use crate::lexer::*;
+use crate::config::lexer::*;
 
 use std::iter::Peekable;
 
