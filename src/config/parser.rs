@@ -1,14 +1,6 @@
-use crate::config::lexer::*;
+use crate::config::{lexer::*, *};
 
 use std::iter::Peekable;
-
-#[derive(PartialEq, Eq, Debug, Clone, Copy)]
-pub enum ParseError {
-    Expected(&'static [TokType]),
-    Custom(&'static str),
-}
-
-pub type Result<T> = std::result::Result<T, ParseError>;
 
 macro_rules! expect {
     ($it:ident,$l:tt) => {{
@@ -58,22 +50,27 @@ macro_rules! ends {
     };
 }
 
-pub struct Parser<'a, I: Iterator<Item = Token>> {
-    iter: &'a mut Peekable<I>,
+pub struct Parser<I: Iterator<Item = Token>> {
+    iter: Peekable<I>,
 }
-impl<'a, I: Iterator<Item = Token>> Parser<'a, I> {
-    #[allow(dead_code)]
-    fn new(iter: &'a mut Peekable<I>) -> Self {
+impl<I: Iterator<Item = Token>> Parser<I> {
+    pub fn new(iter: Peekable<I>) -> Self {
         Parser { iter }
     }
 }
-impl<'a, I: Iterator<Item = Token>> Iterator for Parser<'a, I> {
-    type Item = Result<Entry>;
+impl<I: Iterator<Item = Token>> Iterator for Parser<I> {
+    type Item = ParseResult<Entry>;
     fn next(&mut self) -> Option<Self::Item> {
         // If there's nothing left, we've consumed all the input - yay!
         match self.iter.peek() {
             None => None,
-            Some(_) => Some(Entry::parse(self.iter)),
+            Some(_) => Some({
+                let new = Entry::parse(&mut self.iter);
+                match new {
+                    Err(e) => Err((self.iter.peek().cloned(), e)),
+                    Ok(p) => Ok(p),
+                }
+            }),
         }
     }
 }
@@ -85,7 +82,7 @@ pub struct Entry {
     right: Option<Spec>,
 }
 impl Entry {
-    pub fn parse<I: Iterator<Item = Token>>(iter: &mut Peekable<I>) -> Result<Entry> {
+    pub fn parse<I: Iterator<Item = Token>>(iter: &mut Peekable<I>) -> Result<Entry, ParseError> {
         let left = Spec::parse(iter)?;
         let mut right = None;
         if eat!(iter, MapsTo) {
@@ -142,7 +139,7 @@ impl Spec {
             }
         }
     }
-    pub fn parse<I: Iterator<Item = Token>>(iter: &mut Peekable<I>) -> Result<Spec> {
+    pub fn parse<I: Iterator<Item = Token>>(iter: &mut Peekable<I>) -> Result<Spec, ParseError> {
         let mut string = None;
         if iter
             .peek()
@@ -233,7 +230,9 @@ impl VariantExpr {
                 .and_then(|specnr| specnr.checked_add(nr))
         })
     }
-    pub fn parse<I: Iterator<Item = Token>>(iter: &mut Peekable<I>) -> Result<VariantExpr> {
+    pub fn parse<I: Iterator<Item = Token>>(
+        iter: &mut Peekable<I>,
+    ) -> Result<VariantExpr, ParseError> {
         expect!(iter, [TokType::LBracket]);
         // Better error message.
         if iter
@@ -263,7 +262,9 @@ struct MatchExpr {
     default: Spec,
 }
 impl MatchExpr {
-    pub fn parse<I: Iterator<Item = Token>>(iter: &mut Peekable<I>) -> Result<MatchExpr> {
+    pub fn parse<I: Iterator<Item = Token>>(
+        iter: &mut Peekable<I>,
+    ) -> Result<MatchExpr, ParseError> {
         expect!(iter, [TokType::LBrace]);
         let mut cases = Vec::new();
         loop {
@@ -300,7 +301,7 @@ enum ExprType {
     Bsd,
 }
 impl Expr {
-    pub fn parse<I: Iterator<Item = Token>>(iter: &mut Peekable<I>) -> Result<Expr> {
+    pub fn parse<I: Iterator<Item = Token>>(iter: &mut Peekable<I>) -> Result<Expr, ParseError> {
         macro_rules! exprtype {
             ($i:ident) => {{
                 iter.next();
@@ -356,18 +357,18 @@ mod tests {
     }
 
     fn success(toks: &[Token], ast: &[Entry]) {
-        let mut iter = toks.iter().cloned().peekable();
-        match Parser::new(&mut iter).collect::<Result<Vec<_>>>() {
-            Err(e) => panic!("{:?} at token {:?}", e, iter.peek()),
+        let iter = toks.iter().cloned().peekable();
+        match Parser::new(iter).collect::<ParseResult<Vec<_>>>() {
+            Err(e) => panic!("{:?} at token {:?}", e.1, e.0),
             Ok(parsed) => assert_eq!(parsed, ast),
         }
     }
     fn fail(toks: &[Token], err: ParseError) {
-        let mut iter = toks.iter().cloned().peekable();
-        let res = Parser::new(&mut iter)
-            .collect::<Result<Vec<_>>>()
+        let iter = toks.iter().cloned().peekable();
+        let res = Parser::new(iter)
+            .collect::<ParseResult<Vec<_>>>()
             .unwrap_err();
-        assert_eq!(err, res);
+        assert_eq!(err, res.1);
     }
 
     #[test]
