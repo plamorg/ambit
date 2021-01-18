@@ -39,19 +39,18 @@ impl Token {
     }
 }
 
-pub struct Lexer<'a, I: Iterator<Item = char>> {
-    iter: &'a mut Peekable<I>,
+pub struct Lexer<I: Iterator<Item = char>> {
+    iter: Peekable<I>,
     line: usize,
 }
 
-impl<'a, I: Iterator<Item = char>> Lexer<'a, I> {
-    #[allow(dead_code)]
-    pub fn new(iter: &'a mut Peekable<I>) -> Lexer<'a, I> {
+impl<I: Iterator<Item = char>> Lexer<I> {
+    pub fn new(iter: Peekable<I>) -> Lexer<I> {
         Lexer { iter, line: 1 }
     }
 }
 
-impl<'a, I: Iterator<Item = char>> Iterator for Lexer<'a, I> {
+impl<I: Iterator<Item = char>> Iterator for Lexer<I> {
     type Item = Token;
     fn next(&mut self) -> Option<Self::Item> {
         fn proc_str<I: Iterator<Item = char>>(iter: &mut Peekable<I>, start: char) -> String {
@@ -98,11 +97,11 @@ impl<'a, I: Iterator<Item = char>> Iterator for Lexer<'a, I> {
                             self.iter.next();
                             return Some(new_tok!(MapsTo));
                         } else {
-                            return Some(Token::string(proc_str(self.iter, '='), self.line));
+                            return Some(Token::string(proc_str(&mut self.iter, '='), self.line));
                         }
                     }
                     ' ' | '\t' | '\r' => {}
-                    _ => return Some(Token::string(proc_str(self.iter, chr), self.line)),
+                    _ => return Some(Token::string(proc_str(&mut self.iter, chr), self.line)),
                 },
             }
         }
@@ -114,8 +113,8 @@ mod tests {
     use super::*;
 
     fn check_lexer_output(input: &str, expected: Vec<Token>) {
-        let mut chars = input.chars().peekable();
-        let lex = Lexer::new(&mut chars);
+        let chars = input.chars().peekable();
+        let lex = Lexer::new(chars);
         lex.zip(expected.iter())
             .enumerate()
             .for_each(|(idx, (out, ex_out))| {
