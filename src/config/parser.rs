@@ -1,4 +1,4 @@
-use crate::config::{lexer::*, *};
+use crate::config::{lexer::*, ParseError, ParseResult};
 
 use std::iter::Peekable;
 
