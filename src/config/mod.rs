@@ -15,15 +15,12 @@ pub enum ParseErrorType {
 #[derive(PartialEq, Eq, Debug, Clone)]
 pub struct ParseError {
     pub ty: ParseErrorType,
-    pub tok: Option<lexer::Token>
+    pub tok: Option<lexer::Token>,
 }
 
 impl From<ParseErrorType> for ParseError {
     fn from(ty: ParseErrorType) -> Self {
-        Self {
-            ty,
-            tok: None
-        }
+        Self { ty, tok: None }
     }
 }
 

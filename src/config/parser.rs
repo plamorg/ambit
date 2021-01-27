@@ -70,7 +70,7 @@ impl<I: Iterator<Item = Token>> Iterator for Parser<I> {
                     Err(mut e) => {
                         e.tok = self.iter.peek().cloned();
                         Err(e)
-                    },
+                    }
                     Ok(p) => Ok(p),
                 }
             }),
@@ -90,12 +90,14 @@ impl Entry {
         let mut right = None;
         if eat!(iter, MapsTo) {
             let right_val = Spec::parse(iter)?;
-            let left_nr = left
-                .nr_of_options()
-                .ok_or(ParseError::from(ParseErrorType::Custom("Too many options on left hand side")))?;
-            let right_nr = right_val
-                .nr_of_options()
-                .ok_or(ParseError::from(ParseErrorType::Custom("Too many options on right hand side")))?;
+            let left_nr = left.nr_of_options().ok_or(ParseError {
+                tok: None,
+                ty: ParseErrorType::Custom("Too many options on left hand side"),
+            })?;
+            let right_nr = right_val.nr_of_options().ok_or(ParseError {
+                tok: None,
+                ty: ParseErrorType::Custom("Too many options on right hand side"),
+            })?;
             if left_nr != right_nr {
                 return Err(ParseError::from(ParseErrorType::Custom(
                     "Left and right sides of mapping must match up",
@@ -243,7 +245,9 @@ impl VariantExpr {
             .map(|x| x.toktype == TokType::RBracket)
             .unwrap_or(false)
         {
-            return Err(ParseError::from(ParseErrorType::Custom("Must have at least one option")));
+            return Err(ParseError::from(ParseErrorType::Custom(
+                "Must have at least one option",
+            )));
         }
         let mut specs = Vec::new();
         loop {
@@ -530,7 +534,13 @@ mod tests {
 
     #[test]
     fn semicolon_error() {
-        fail(&toklist!["a"], ParseError { tok: None, ty: ParseErrorType::Expected(&[TokType::Semicolon]) });
+        fail(
+            &toklist!["a"],
+            ParseError {
+                tok: None,
+                ty: ParseErrorType::Expected(&[TokType::Semicolon]),
+            },
+        );
     }
     // TODO: add more tests
 }
