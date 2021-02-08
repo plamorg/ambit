@@ -4,6 +4,7 @@ use clap::{App, AppSettings, Arg, SubCommand};
 
 use std::process;
 
+use ambit::config;
 use ambit::error::{self, AmbitError, AmbitResult};
 use directories::AMBIT_PATHS;
 
@@ -24,13 +25,22 @@ fn create_paths(force: bool) -> AmbitResult<()> {
     Ok(())
 }
 
+fn get_config_entries() -> AmbitResult<Vec<config::parser::Entry>> {
+    let content = AMBIT_PATHS.config.as_string()?;
+    match config::get_entries(content.chars().peekable()).collect::<Result<Vec<_>, _>>() {
+        Ok(entries) => Ok(entries),
+        Err(e) => return Err(AmbitError::Parse(e)),
+    }
+}
+
 mod cmd {
-    use super::create_paths;
-    use ambit::error::{AmbitError, AmbitResult};
+    use super::directories::AMBIT_PATHS;
+    use super::{create_paths, get_config_entries};
+
     use std::io::{self, Write};
     use std::process::Command;
 
-    use super::directories::AMBIT_PATHS;
+    use ambit::error::{AmbitError, AmbitResult};
 
     // Initialize an empty dotfile repository
     pub fn init(force: bool) -> AmbitResult<()> {
@@ -66,10 +76,15 @@ mod cmd {
         }
     }
 
-    // Parse configuration to identify files that are absent from the dotfile repository
-    pub fn validate() -> AmbitResult<()> {
+    // Check ambit configuration for errors
+    pub fn check() -> AmbitResult<()> {
+        get_config_entries()?;
+        Ok(())
+    }
+
+    // Sync files in dotfile repository to system through symbolic links
+    pub fn sync() -> AmbitResult<()> {
         unimplemented!();
-        // TODO: implement validate
     }
 
     // Run git commands from the dotfile repository
@@ -109,31 +124,32 @@ fn run() -> AmbitResult<()> {
                 .arg(&force_arg)
                 .arg(Arg::with_name("ORIGIN").index(1).required(true)),
         )
-        .subcommand(SubCommand::with_name("validate").about(
-            "Parse configuration to identify files that are absent from the dotfile repository",
-        ))
         .subcommand(
             SubCommand::with_name("git")
                 .about("Run git commands from the dotfile repository")
                 .arg(Arg::with_name("GIT_ARGUMENTS").required(true).min_values(1)),
         )
+        .subcommand(
+            SubCommand::with_name("sync")
+                .about("Sync files in dotfile repository to system through symbolic links"),
+        )
+        .subcommand(SubCommand::with_name("check").about("Check ambit configuration for errors"))
         .get_matches();
 
     if let Some(matches) = matches.subcommand_matches("init") {
         let force = matches.is_present("force");
         cmd::init(force)?;
-    }
-    if let Some(matches) = matches.subcommand_matches("clone") {
+    } else if let Some(matches) = matches.subcommand_matches("clone") {
         let force = matches.is_present("force");
         let origin = matches.value_of("ORIGIN").unwrap_or("");
         cmd::clone(force, origin)?;
-    }
-    if matches.is_present("validate") {
-        cmd::validate()?;
-    }
-    if let Some(matches) = matches.subcommand_matches("git") {
+    } else if let Some(matches) = matches.subcommand_matches("git") {
         let git_arguments: Vec<_> = matches.values_of("GIT_ARGUMENTS").unwrap().collect();
         cmd::git(git_arguments)?;
+    } else if matches.is_present("check") {
+        cmd::check()?;
+    } else if matches.is_present("sync") {
+        cmd::sync()?;
     }
     Ok(())
 }

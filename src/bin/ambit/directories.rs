@@ -1,5 +1,6 @@
 use lazy_static::lazy_static;
 use std::fs::{self, File};
+use std::io::Read;
 use std::path::PathBuf;
 
 use ambit::error::{AmbitError, AmbitResult};
@@ -35,6 +36,21 @@ impl AmbitPath {
             Some(e) => Ok(e),
             None => Err(AmbitError::Other(
                 "Could not yield path as &str slice".to_string(),
+            )),
+        }
+    }
+
+    // Fetch the content of a path if it is AmbitPathKind::File
+    pub fn as_string(&self) -> AmbitResult<String> {
+        match self.kind {
+            AmbitPathKind::File => {
+                let mut file = File::open(&self.path)?;
+                let mut content = String::new();
+                file.read_to_string(&mut content)?;
+                Ok(content)
+            }
+            AmbitPathKind::Directory => Err(AmbitError::Other(
+                "Getting content of a directory is not supported".to_string(),
             )),
         }
     }

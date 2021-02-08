@@ -4,6 +4,8 @@ pub mod parser;
 use lexer::Lexer;
 pub use parser::{Entry, Parser};
 
+use std::error::Error;
+use std::fmt::{self, Display, Formatter};
 use std::iter::Peekable;
 
 #[derive(PartialEq, Eq, Debug, Clone, Copy)]
@@ -17,6 +19,15 @@ pub struct ParseError {
     pub ty: ParseErrorType,
     // Some(_) if it failed at a token, or None if it failed at EOF.
     pub tok: Option<lexer::Token>,
+}
+
+impl Error for ParseError {}
+
+impl Display for ParseError {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        // TODO: Output parse error nicely
+        write!(f, "{:?}", self)
+    }
 }
 
 impl From<ParseErrorType> for ParseError {
