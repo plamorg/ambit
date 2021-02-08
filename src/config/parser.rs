@@ -537,7 +537,7 @@ mod tests {
         fail(
             &toklist!["a"],
             ParseError {
-                tok: None,
+                tok: None, // `None` means it failed at EOF
                 ty: ParseErrorType::Expected(&[TokType::Semicolon]),
             },
         );

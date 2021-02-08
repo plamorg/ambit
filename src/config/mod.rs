@@ -15,6 +15,7 @@ pub enum ParseErrorType {
 #[derive(PartialEq, Eq, Debug, Clone)]
 pub struct ParseError {
     pub ty: ParseErrorType,
+    // Some(_) if it failed at a token, or None if it failed at EOF.
     pub tok: Option<lexer::Token>,
 }
 
