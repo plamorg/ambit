@@ -1,18 +1,28 @@
-use std::process;
-use std::{fmt, io};
+use std::error::Error;
+use std::fmt::{self, Display, Formatter};
+use std::{io, process};
+
+use crate::config;
 
 pub type AmbitResult<T> = Result<T, AmbitError>;
 
 #[derive(Debug)]
 pub enum AmbitError {
     Io(io::Error),
+    // TODO: As of now, a single ParseError is returned from config::get_entries
+    //       Future changes may result in a Vec<ParseError> being returned.
+    //       This should be taken care of.
+    Parse(config::ParseError),
     Other(String),
 }
 
-impl fmt::Display for AmbitError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+impl Error for AmbitError {}
+
+impl Display for AmbitError {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         match *self {
             AmbitError::Io(ref e) => e.fmt(f),
+            AmbitError::Parse(ref e) => e.fmt(f),
             AmbitError::Other(ref s) => f.write_str(&**s),
         }
     }
