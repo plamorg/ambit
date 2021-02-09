@@ -25,6 +25,7 @@ fn create_paths(force: bool) -> AmbitResult<()> {
     Ok(())
 }
 
+// Fetch entries from config file and return as vector
 fn get_config_entries() -> AmbitResult<Vec<config::parser::Entry>> {
     let content = AMBIT_PATHS.config.as_string()?;
     match config::get_entries(content.chars().peekable()).collect::<Result<Vec<_>, _>>() {
@@ -56,21 +57,22 @@ mod cmd {
     }
 
     // Clone an existing dotfile repository with given origin
-    pub fn clone(force: bool, origin: &str) -> AmbitResult<()> {
+    pub fn clone(force: bool, arguments: Vec<&str>) -> AmbitResult<()> {
         match create_paths(force) {
             Ok(()) => {
                 // Clone will handle creating the repository directory
+                let repo_path = AMBIT_PATHS.repo.to_str()?;
                 let status = Command::new("git")
-                    .args(&["clone", origin, AMBIT_PATHS.repo.to_str()?])
+                    .arg("clone")
+                    .args(arguments)
+                    // Pass in ambit repo path as last argument to ensure that it is always cloned to the known path
+                    .arg(repo_path)
                     .status()?;
                 if status.success() {
-                    println!("Successfully cloned repository with origin: {}", origin);
+                    println!("Successfully cloned repository to {}", repo_path);
                     return Ok(());
                 }
-                Err(AmbitError::Other(format!(
-                    "Failed to clone repository with origin: {}",
-                    origin
-                )))
+                Err(AmbitError::Other("Failed to clone repository".to_string()))
             }
             Err(e) => Err(e),
         }
@@ -96,7 +98,7 @@ mod cmd {
                 ["--git-dir=", AMBIT_PATHS.git.to_str()?].concat(),
                 ["--work-tree=", AMBIT_PATHS.repo.to_str()?].concat(),
             ])
-            .args(&arguments)
+            .args(arguments)
             .output()?;
         io::stdout().write_all(&output.stdout)?;
         io::stdout().write_all(&output.stderr)?;
@@ -104,6 +106,7 @@ mod cmd {
     }
 }
 
+// Return instance of ambit application
 fn get_app() -> App<'static, 'static> {
     let force_arg = Arg::with_name("force")
         .short("f")
@@ -113,6 +116,7 @@ fn get_app() -> App<'static, 'static> {
     App::new("ambit")
         .about("Dotfile manager")
         .setting(AppSettings::ArgRequiredElseHelp)
+        .setting(AppSettings::VersionlessSubcommands)
         .subcommand(
             SubCommand::with_name("init")
                 .about("Initialize an empty dotfile repository")
@@ -120,14 +124,14 @@ fn get_app() -> App<'static, 'static> {
         )
         .subcommand(
             SubCommand::with_name("clone")
-                .about("Clone an existing dotfile repository with given origin")
                 .arg(&force_arg)
-                .arg(Arg::with_name("ORIGIN").index(1).required(true)),
+                .about("Clone an existing dotfile repository with given origin")
+                .setting(AppSettings::AllowLeadingHyphen)
+                .arg(Arg::with_name("GIT_ARGUMENTS").required(true).min_values(1)),
         )
         .subcommand(
             SubCommand::with_name("git")
                 .about("Run git commands from the dotfile repository")
-                // Allow hyphen values so passing hyphen git arguments does not fail
                 .setting(AppSettings::AllowLeadingHyphen)
                 .arg(Arg::with_name("GIT_ARGUMENTS").required(true).min_values(1)),
         )
@@ -138,6 +142,7 @@ fn get_app() -> App<'static, 'static> {
         .subcommand(SubCommand::with_name("check").about("Check ambit configuration for errors"))
 }
 
+// Fetch application matches and run commands accordingly
 fn run() -> AmbitResult<()> {
     let matches = get_app().get_matches();
 
@@ -146,10 +151,10 @@ fn run() -> AmbitResult<()> {
         cmd::init(force)?;
     } else if let Some(matches) = matches.subcommand_matches("clone") {
         let force = matches.is_present("force");
-        let origin = matches.value_of("ORIGIN").unwrap_or("");
-        cmd::clone(force, origin)?;
+        let git_arguments = matches.values_of("GIT_ARGUMENTS").unwrap().collect();
+        cmd::clone(force, git_arguments)?;
     } else if let Some(matches) = matches.subcommand_matches("git") {
-        let git_arguments: Vec<_> = matches.values_of("GIT_ARGUMENTS").unwrap().collect();
+        let git_arguments = matches.values_of("GIT_ARGUMENTS").unwrap().collect();
         cmd::git(git_arguments)?;
     } else if matches.is_present("check") {
         cmd::check()?;
@@ -198,5 +203,23 @@ mod tests {
             None => None,
         };
         assert_eq!(git_arguments, Some(vec!["status", "-v", "--short"]));
+    }
+
+    #[test]
+    fn clone_git_arguments() {
+        let matches = arguments_list!(
+            "clone",
+            "https://github.com/plamorg/ambit",
+            // In terms of intended behavior, the following -f flag should be treated as a flag to ambit rather than git
+            "-f",
+            "--recursive"
+        );
+        let clone_matches = matches.subcommand_matches("clone").unwrap();
+        let git_arguments: Vec<_> = clone_matches.values_of("GIT_ARGUMENTS").unwrap().collect();
+        // Although git arguments are allowed, we want to ensure that passing -f passes as an ambit flag
+        assert_eq!(
+            git_arguments,
+            vec!["https://github.com/plamorg/ambit", "--recursive"]
+        );
     }
 }
