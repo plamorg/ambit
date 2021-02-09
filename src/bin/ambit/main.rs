@@ -104,13 +104,13 @@ mod cmd {
     }
 }
 
-fn run() -> AmbitResult<()> {
+fn get_app() -> App<'static, 'static> {
     let force_arg = Arg::with_name("force")
         .short("f")
         .long("force")
         .help("Overwrite currently initialized dotfile repository");
 
-    let matches = App::new("ambit")
+    App::new("ambit")
         .about("Dotfile manager")
         .setting(AppSettings::ArgRequiredElseHelp)
         .subcommand(
@@ -127,6 +127,8 @@ fn run() -> AmbitResult<()> {
         .subcommand(
             SubCommand::with_name("git")
                 .about("Run git commands from the dotfile repository")
+                // Allow hyphen values so passing hyphen git arguments does not fail
+                .setting(AppSettings::AllowLeadingHyphen)
                 .arg(Arg::with_name("GIT_ARGUMENTS").required(true).min_values(1)),
         )
         .subcommand(
@@ -134,7 +136,10 @@ fn run() -> AmbitResult<()> {
                 .about("Sync files in dotfile repository to system through symbolic links"),
         )
         .subcommand(SubCommand::with_name("check").about("Check ambit configuration for errors"))
-        .get_matches();
+}
+
+fn run() -> AmbitResult<()> {
+    let matches = get_app().get_matches();
 
     if let Some(matches) = matches.subcommand_matches("init") {
         let force = matches.is_present("force");
@@ -160,4 +165,38 @@ fn main() {
         Err(error) => error::default_error_handler(&error),
         Ok(()) => process::exit(0),
     };
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // Convenient macro to construct matches from arguments and to assert parsing succeeds
+    macro_rules! arguments_list {
+        [$($i:expr),*] => {{
+            let matches = get_app().get_matches_from_safe(vec!["ambit", $($i),*]);
+            assert!(matches.is_ok());
+            matches.unwrap()
+        }}
+    }
+
+    #[test]
+    fn force_flag() {
+        let matches = arguments_list!("init", "-f");
+        let has_force = match matches.subcommand_matches("init") {
+            Some(matches) => matches.is_present("force"),
+            None => false,
+        };
+        assert!(has_force);
+    }
+
+    #[test]
+    fn git_arguments_with_hyphen() {
+        let matches = arguments_list!("git", "status", "-v", "--short");
+        let git_arguments: Option<Vec<_>> = match matches.subcommand_matches("git") {
+            Some(matches) => Some(matches.values_of("GIT_ARGUMENTS").unwrap().collect()),
+            None => None,
+        };
+        assert_eq!(git_arguments, Some(vec!["status", "-v", "--short"]));
+    }
 }
