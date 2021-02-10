@@ -126,7 +126,6 @@ fn get_app() -> App<'static, 'static> {
             SubCommand::with_name("clone")
                 .arg(&force_arg)
                 .about("Clone an existing dotfile repository with given origin")
-                .setting(AppSettings::AllowLeadingHyphen)
                 .arg(Arg::with_name("GIT_ARGUMENTS").required(true).min_values(1)),
         )
         .subcommand(
@@ -185,6 +184,13 @@ mod tests {
         }}
     }
 
+    // Macro to assert that given arguments list fails
+    macro_rules! fail_with_arguments_list {
+        [$($i:expr),*] => {{
+            assert!(get_app().get_matches_from_safe(vec!["ambit", $($i),*]).is_err(), "Did not error");
+        }}
+    }
+
     #[test]
     fn force_flag() {
         let matches = arguments_list!("init", "-f");
@@ -206,20 +212,68 @@ mod tests {
     }
 
     #[test]
-    fn clone_git_arguments() {
+    fn clone_with_git_argument() {
         let matches = arguments_list!(
             "clone",
+            // Any arguments passed after the following -- should be passed as git arguments
+            "--",
             "https://github.com/plamorg/ambit",
-            // In terms of intended behavior, the following -f flag should be treated as a flag to ambit rather than git
-            "-f",
             "--recursive"
         );
         let clone_matches = matches.subcommand_matches("clone").unwrap();
         let git_arguments: Vec<_> = clone_matches.values_of("GIT_ARGUMENTS").unwrap().collect();
-        // Although git arguments are allowed, we want to ensure that passing -f passes as an ambit flag
         assert_eq!(
             git_arguments,
             vec!["https://github.com/plamorg/ambit", "--recursive"]
+        );
+    }
+
+    #[test]
+    fn clone_normal() {
+        // Since this is a regular call without additional git arguments, -- can be omitted
+        let matches = arguments_list!("clone", "https://github.com/plamorg/ambit");
+        let clone_matches = matches.subcommand_matches("clone").unwrap();
+        let git_arguments: Vec<_> = clone_matches.values_of("GIT_ARGUMENTS").unwrap().collect();
+        assert_eq!(git_arguments, vec!["https://github.com/plamorg/ambit"]);
+    }
+
+    #[test]
+    fn clone_with_invalid_argument() {
+        // --invalid is passed to ambit where it is known that it is not a valid ambit flag
+        fail_with_arguments_list!("clone", "--invalid", "https://github.com/plamorg/ambit");
+    }
+
+    #[test]
+    fn clone_force() {
+        let matches = arguments_list!(
+            "clone",
+            "https://github.com/plamorg/ambit",
+            // Without --, the following -f flag is assumed to be passed as an ambit argument
+            "-f"
+        );
+        let clone_matches = matches.subcommand_matches("clone").unwrap();
+        let has_force = clone_matches.is_present("force");
+        let git_arguments: Vec<_> = clone_matches.values_of("GIT_ARGUMENTS").unwrap().collect();
+        assert!(has_force);
+        assert_eq!(git_arguments, vec!["https://github.com/plamorg/ambit"]);
+    }
+
+    #[test]
+    fn clone_with_force_as_git_argument() {
+        let matches = arguments_list!(
+            "clone",
+            "--",
+            "https://github.com/plamorg/ambit",
+            // Because the -f flag comes after --, it should be passed as a git argument
+            "-f"
+        );
+        let clone_matches = matches.subcommand_matches("clone").unwrap();
+        let has_force = clone_matches.is_present("force");
+        let git_arguments: Vec<_> = clone_matches.values_of("GIT_ARGUMENTS").unwrap().collect();
+        assert!(!has_force);
+        assert_eq!(
+            git_arguments,
+            vec!["https://github.com/plamorg/ambit", "-f"]
         );
     }
 }
