@@ -62,11 +62,13 @@ mod cmd {
             // Pass in ambit repo path as last argument to ensure that it is always cloned to the known path
             .arg(repo_path)
             .status()?;
-        if status.success() {
-            println!("Successfully cloned repository to {}", repo_path);
-            return Ok(());
+        match status.success() {
+            true => {
+                println!("Successfully cloned repository to {}", repo_path);
+                Ok(())
+            }
+            false => Err(AmbitError::Other("Failed to clone repository".to_string())),
         }
-        Err(AmbitError::Other("Failed to clone repository".to_string()))
     }
 
     // Check ambit configuration for errors
