@@ -28,10 +28,9 @@ fn ensure_paths_exist(force: bool) -> AmbitResult<()> {
 // Fetch entries from config file and return as vector
 fn get_config_entries() -> AmbitResult<Vec<config::parser::Entry>> {
     let content = AMBIT_PATHS.config.as_string()?;
-    match config::get_entries(content.chars().peekable()).collect::<Result<Vec<_>, _>>() {
-        Ok(entries) => Ok(entries),
-        Err(e) => Err(AmbitError::Parse(e)),
-    }
+    config::get_entries(content.chars().peekable())
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(AmbitError::Parse)
 }
 
 mod cmd {
