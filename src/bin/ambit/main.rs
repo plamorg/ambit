@@ -9,7 +9,7 @@ use ambit::error::{self, AmbitError, AmbitResult};
 use directories::AMBIT_PATHS;
 
 // Initialize config and repository directory
-fn create_paths(force: bool) -> AmbitResult<()> {
+fn ensure_paths_exist(force: bool) -> AmbitResult<()> {
     if !AMBIT_PATHS.config.exists() {
         AMBIT_PATHS.config.create()?;
     }
@@ -28,15 +28,14 @@ fn create_paths(force: bool) -> AmbitResult<()> {
 // Fetch entries from config file and return as vector
 fn get_config_entries() -> AmbitResult<Vec<config::parser::Entry>> {
     let content = AMBIT_PATHS.config.as_string()?;
-    match config::get_entries(content.chars().peekable()).collect::<Result<Vec<_>, _>>() {
-        Ok(entries) => Ok(entries),
-        Err(e) => Err(AmbitError::Parse(e)),
-    }
+    config::get_entries(content.chars().peekable())
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(AmbitError::Parse)
 }
 
 mod cmd {
     use super::directories::AMBIT_PATHS;
-    use super::{create_paths, get_config_entries};
+    use super::{ensure_paths_exist, get_config_entries};
 
     use std::io::{self, Write};
     use std::process::Command;
@@ -45,36 +44,30 @@ mod cmd {
 
     // Initialize an empty dotfile repository
     pub fn init(force: bool) -> AmbitResult<()> {
-        match create_paths(force) {
-            Ok(()) => {
-                AMBIT_PATHS.repo.create()?;
-                // Initialize an empty git repository
-                git(vec!["init"])?;
-                Ok(())
-            }
-            Err(e) => Err(e),
-        }
+        ensure_paths_exist(force)?;
+        AMBIT_PATHS.repo.create()?;
+        // Initialize an empty git repository
+        git(vec!["init"])?;
+        Ok(())
     }
 
     // Clone an existing dotfile repository with given origin
     pub fn clone(force: bool, arguments: Vec<&str>) -> AmbitResult<()> {
-        match create_paths(force) {
-            Ok(()) => {
-                // Clone will handle creating the repository directory
-                let repo_path = AMBIT_PATHS.repo.to_str()?;
-                let status = Command::new("git")
-                    .arg("clone")
-                    .args(arguments)
-                    // Pass in ambit repo path as last argument to ensure that it is always cloned to the known path
-                    .arg(repo_path)
-                    .status()?;
-                if status.success() {
-                    println!("Successfully cloned repository to {}", repo_path);
-                    return Ok(());
-                }
-                Err(AmbitError::Other("Failed to clone repository".to_string()))
+        ensure_paths_exist(force)?;
+        // Clone will handle creating the repository directory
+        let repo_path = AMBIT_PATHS.repo.to_str()?;
+        let status = Command::new("git")
+            .arg("clone")
+            .args(arguments)
+            // Pass in ambit repo path as last argument to ensure that it is always cloned to the known path
+            .arg(repo_path)
+            .status()?;
+        match status.success() {
+            true => {
+                println!("Successfully cloned repository to {}", repo_path);
+                Ok(())
             }
-            Err(e) => Err(e),
+            false => Err(AmbitError::Other("Failed to clone repository".to_string())),
         }
     }
 
