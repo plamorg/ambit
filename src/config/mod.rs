@@ -1,8 +1,10 @@
+pub mod ast;
 pub mod lexer;
 pub mod parser;
 
+pub use ast::Entry;
 use lexer::Lexer;
-pub use parser::{Entry, Parser};
+pub use parser::Parser;
 
 use std::error::Error;
 use std::fmt::{self, Display, Formatter};

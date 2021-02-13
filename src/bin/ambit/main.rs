@@ -26,7 +26,7 @@ fn ensure_paths_exist(force: bool) -> AmbitResult<()> {
 }
 
 // Fetch entries from config file and return as vector
-fn get_config_entries() -> AmbitResult<Vec<config::parser::Entry>> {
+fn get_config_entries() -> AmbitResult<Vec<config::Entry>> {
     let content = AMBIT_PATHS.config.as_string()?;
     config::get_entries(content.chars().peekable())
         .collect::<Result<Vec<_>, _>>()
