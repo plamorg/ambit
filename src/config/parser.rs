@@ -154,16 +154,13 @@ impl Spec {
                 TokType::LBracket => {
                     return Ok(Spec {
                         string,
-                        spectype: SpecType::Variant(
-                            Box::new(VariantExpr::parse(iter)?), 
-                            {
-                                if starts_spec(iter) {
-                                    Some(Box::new(Spec::parse(iter)?))
-                                } else {
-                                    None
-                                }
+                        spectype: SpecType::Variant(Box::new(VariantExpr::parse(iter)?), {
+                            if starts_spec(iter) {
+                                Some(Box::new(Spec::parse(iter)?))
+                            } else {
+                                None
                             }
-                        ),
+                        }),
                     });
                 }
                 _ => {}
