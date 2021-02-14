@@ -73,7 +73,7 @@ impl MatchExpr {
                 return &case.1;
             }
         }
-        return &self.default;
+        &self.default
     }
 }
 
