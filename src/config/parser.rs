@@ -1,20 +1,21 @@
-use crate::config::{lexer::*, ParseError, ParseErrorType, ParseResult};
+use crate::config::{ast::*, lexer::*, ParseError, ParseErrorType, ParseResult};
 
 use std::iter::Peekable;
 
-macro_rules! expect {
-    ($it:ident,$l:tt) => {{
-        let res = $l
-            .iter()
-            .find(|ty| $it.peek().map(|x| x.toktype == **ty).unwrap_or(false));
-        match res {
-            None => return Err(ParseError::from(ParseErrorType::Expected(&$l))),
-            Some(tok) => {
-                $it.next();
-                tok
-            }
+fn expect<I: Iterator<Item = Token>>(
+    iter: &mut Peekable<I>,
+    choices: &'static [TokType],
+) -> ParseResult<TokType> {
+    let res = choices
+        .iter()
+        .find(|ty| iter.peek().map(|x| x.toktype == **ty).unwrap_or(false));
+    match res {
+        None => Err(ParseError::from(ParseErrorType::Expected(choices))),
+        Some(tok) => {
+            iter.next();
+            Ok(*tok)
         }
-    }};
+    }
 }
 
 macro_rules! eat {
@@ -42,12 +43,6 @@ macro_rules! eat {
             false
         }
     }};
-}
-
-macro_rules! ends {
-    ($it:ident) => {
-        $it.peek().is_none()
-    };
 }
 
 pub struct Parser<I: Iterator<Item = Token>> {
@@ -79,13 +74,8 @@ impl<I: Iterator<Item = Token>> Iterator for Parser<I> {
 }
 
 // entry -> spec ("=>" spec)? ";"
-#[derive(PartialEq, Eq, Debug, Clone)]
-pub struct Entry {
-    left: Spec,
-    right: Option<Spec>,
-}
 impl Entry {
-    pub fn parse<I: Iterator<Item = Token>>(iter: &mut Peekable<I>) -> Result<Entry, ParseError> {
+    pub fn parse<I: Iterator<Item = Token>>(iter: &mut Peekable<I>) -> ParseResult<Entry> {
         let left = Spec::parse(iter)?;
         let mut right = None;
         if eat!(iter, MapsTo) {
@@ -105,46 +95,17 @@ impl Entry {
             }
             right = Some(right_val);
         }
-        expect!(iter, [TokType::Semicolon]);
+        expect(iter, &[TokType::Semicolon])?;
         Ok(Entry { left, right })
     }
 }
 
-// A `Spec` specifies a fragment of a path, e.g. "~/.config/[nvim/init.vim, spectrwm.conf]".
 /* spec -> str
  *      -> str? variant-expr spec?
  *      -> str? match-expr spec?
  */
-#[derive(PartialEq, Eq, Debug, Clone)]
-struct Spec {
-    string: Option<String>,
-    spectype: SpecType,
-}
-#[derive(PartialEq, Eq, Debug, Clone)]
-enum SpecType {
-    None,
-    Variant(Box<VariantExpr>, Option<Box<Spec>>),
-    Match(Box<MatchExpr>, Option<Box<Spec>>),
-}
 impl Spec {
-    /* Returns None if the nr. of options
-     * overflows `usize`.
-     */
-    pub fn nr_of_options(&self) -> Option<usize> {
-        match &self.spectype {
-            SpecType::None => Some(1),
-            SpecType::Match(_, spec) => spec.as_ref().map(|s| s.nr_of_options()).unwrap_or(Some(1)),
-            SpecType::Variant(expr, spec) => {
-                let exprnr = expr.nr_of_options()?;
-                let specnr = spec
-                    .as_ref()
-                    .map(|s| s.nr_of_options())
-                    .unwrap_or(Some(1))?;
-                exprnr.checked_mul(specnr)
-            }
-        }
-    }
-    pub fn parse<I: Iterator<Item = Token>>(iter: &mut Peekable<I>) -> Result<Spec, ParseError> {
+    pub fn parse<I: Iterator<Item = Token>>(iter: &mut Peekable<I>) -> ParseResult<Spec> {
         let mut string = None;
         if iter
             .peek()
@@ -158,18 +119,21 @@ impl Spec {
                     .expect("Internal error: string expected!"),
             );
         }
-        fn probably_ends_spec<I: Iterator<Item = Token>>(iter: &mut Peekable<I>) -> bool {
-            // Check if the iterator "probably ends" here,
-            // or we need to do another round of parsing.
-            ends!(iter)
-                || iter
-                    .peek()
-                    .map(|next| {
-                        [TokType::Semicolon, TokType::MapsTo]
-                            .iter()
-                            .any(|x| next.toktype == *x)
-                    })
-                    .unwrap_or(false)
+        fn try_parse_spec<I: Iterator<Item = Token>>(
+            iter: &mut Peekable<I>,
+        ) -> ParseResult<Option<Box<Spec>>> {
+            // Check if a new spec could start here.
+            // Note that this should be updated if the spec specification changes.
+            fn is_starting_token(next: &Token) -> bool {
+                [TokType::Str, TokType::LBrace, TokType::LBracket]
+                    .iter()
+                    .any(|x| next.toktype == *x)
+            }
+            if iter.peek().map(is_starting_token).unwrap_or(false) {
+                Ok(Some(Box::new(Spec::parse(iter)?)))
+            } else {
+                Ok(None)
+            }
         }
         // optimization
         match iter.peek() {
@@ -180,32 +144,17 @@ impl Spec {
                         string,
                         spectype: SpecType::Match(
                             Box::new(MatchExpr::parse(iter)?),
-                            // If we didn't do this hack,
-                            // the grammar wouldn't be LL(1).
-                            {
-                                if probably_ends_spec(iter) {
-                                    // It ends here.
-                                    None
-                                } else {
-                                    // It *probably* doesn't end here.
-                                    Some(Box::new(Spec::parse(iter)?))
-                                }
-                            },
+                            try_parse_spec(iter)?,
                         ),
                     });
                 }
                 TokType::LBracket => {
                     return Ok(Spec {
                         string,
-                        spectype: SpecType::Variant(Box::new(VariantExpr::parse(iter)?), {
-                            if probably_ends_spec(iter) {
-                                // It ends here.
-                                None
-                            } else {
-                                // It *probably* doesn't end here.
-                                Some(Box::new(Spec::parse(iter)?))
-                            }
-                        }),
+                        spectype: SpecType::Variant(
+                            Box::new(VariantExpr::parse(iter)?),
+                            try_parse_spec(iter)?,
+                        ),
                     });
                 }
                 _ => {}
@@ -223,22 +172,9 @@ impl Spec {
 }
 
 // variant-expr -> [ spec (, spec)* ]
-#[derive(PartialEq, Eq, Debug, Clone)]
-struct VariantExpr {
-    specs: Vec<Spec>,
-}
 impl VariantExpr {
-    // Returns None if the nr of options is larger than usize::MAX.
-    pub fn nr_of_options(&self) -> Option<usize> {
-        self.specs.iter().try_fold(0usize, |nr, spec| {
-            spec.nr_of_options()
-                .and_then(|specnr| specnr.checked_add(nr))
-        })
-    }
-    pub fn parse<I: Iterator<Item = Token>>(
-        iter: &mut Peekable<I>,
-    ) -> Result<VariantExpr, ParseError> {
-        expect!(iter, [TokType::LBracket]);
+    pub fn parse<I: Iterator<Item = Token>>(iter: &mut Peekable<I>) -> ParseResult<VariantExpr> {
+        expect(iter, &[TokType::LBracket])?;
         // Better error message.
         if iter
             .peek()
@@ -256,59 +192,39 @@ impl VariantExpr {
                 break;
             }
         }
-        expect!(iter, [TokType::RBracket]);
+        expect(iter, &[TokType::RBracket])?;
         Ok(VariantExpr { specs })
     }
 }
 
-// Matches, based on the expr, which spec to produce.
 // match-expr -> { (expr ":" spec ":")* "default" ":" spec }
-#[derive(PartialEq, Eq, Debug, Clone)]
-struct MatchExpr {
-    cases: Vec<(Expr, Spec)>,
-    default: Spec,
-}
 impl MatchExpr {
-    pub fn parse<I: Iterator<Item = Token>>(
-        iter: &mut Peekable<I>,
-    ) -> Result<MatchExpr, ParseError> {
-        expect!(iter, [TokType::LBrace]);
+    pub fn parse<I: Iterator<Item = Token>>(iter: &mut Peekable<I>) -> ParseResult<MatchExpr> {
+        expect(iter, &[TokType::LBrace])?;
         let mut cases = Vec::new();
         loop {
             if eat!(iter, "default") {
-                expect!(iter, [TokType::Colon]);
+                expect(iter, &[TokType::Colon])?;
                 let ret = MatchExpr {
                     cases,
                     default: Spec::parse(iter)?,
                 };
-                expect!(iter, [TokType::RBrace]);
+                expect(iter, &[TokType::RBrace])?;
                 return Ok(ret);
             }
             let expr = Expr::parse(iter)?;
-            expect!(iter, [TokType::Colon]);
+            expect(iter, &[TokType::Colon])?;
             let spec = Spec::parse(iter)?;
             cases.push((expr, spec));
-            expect!(iter, [TokType::Comma]);
+            expect(iter, &[TokType::Comma])?;
         }
     }
 }
 
 // expr -> "windows" | "linux" | "macos" | "unix" | "bsd"
 // (for now)
-#[derive(PartialEq, Eq, Debug, Clone)]
-struct Expr {
-    exprtype: ExprType,
-}
-#[derive(PartialEq, Eq, Debug, Clone)]
-enum ExprType {
-    Windows,
-    Linux,
-    Macos,
-    Unix,
-    Bsd,
-}
 impl Expr {
-    pub fn parse<I: Iterator<Item = Token>>(iter: &mut Peekable<I>) -> Result<Expr, ParseError> {
+    pub fn parse<I: Iterator<Item = Token>>(iter: &mut Peekable<I>) -> ParseResult<Expr> {
         macro_rules! exprtype {
             ($i:ident) => {{
                 iter.next();
@@ -528,6 +444,53 @@ mod tests {
                         None,
                     ),
                 }),
+            }],
+        );
+    }
+
+    #[test]
+    fn nested_variant_with_only_one_option() {
+        success(
+            &toklist![
+                ".config/",
+                TokType::LBracket,
+                "kitty/",
+                TokType::LBracket,
+                "kitty.conf",
+                TokType::Comma,
+                "theme.conf",
+                TokType::RBracket,
+                TokType::RBracket,
+                TokType::Semicolon
+            ],
+            &[Entry {
+                left: Spec {
+                    string: Some(".config/".to_owned()),
+                    spectype: SpecType::Variant(
+                        Box::new(VariantExpr {
+                            specs: vec![Spec {
+                                string: Some("kitty/".to_owned()),
+                                spectype: SpecType::Variant(
+                                    Box::new(VariantExpr {
+                                        specs: vec![
+                                            Spec {
+                                                string: Some("kitty.conf".to_owned()),
+                                                spectype: SpecType::None,
+                                            },
+                                            Spec {
+                                                string: Some("theme.conf".to_owned()),
+                                                spectype: SpecType::None,
+                                            },
+                                        ],
+                                    }),
+                                    None,
+                                ),
+                            }],
+                        }),
+                        None,
+                    ),
+                },
+                right: None,
             }],
         );
     }
