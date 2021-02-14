@@ -119,16 +119,21 @@ impl Spec {
                     .expect("Internal error: string expected!"),
             );
         }
-        fn starts_spec<I: Iterator<Item = Token>>(iter: &mut Peekable<I>) -> bool {
+        fn try_parse_spec<I: Iterator<Item = Token>>(
+            iter: &mut Peekable<I>,
+        ) -> ParseResult<Option<Box<Spec>>> {
             // Check if a new spec could start here.
             // Note that this should be updated if the spec specification changes.
-            iter.peek()
-                .map(|next| {
-                    [TokType::Str, TokType::LBrace, TokType::LBracket]
-                        .iter()
-                        .any(|x| next.toktype == *x)
-                })
-                .unwrap_or(false)
+            fn is_starting_token(next: &Token) -> bool {
+                [TokType::Str, TokType::LBrace, TokType::LBracket]
+                    .iter()
+                    .any(|x| next.toktype == *x)
+            }
+            if iter.peek().map(is_starting_token).unwrap_or(false) {
+                Ok(Some(Box::new(Spec::parse(iter)?)))
+            } else {
+                Ok(None)
+            }
         }
         // optimization
         match iter.peek() {
@@ -139,28 +144,17 @@ impl Spec {
                         string,
                         spectype: SpecType::Match(
                             Box::new(MatchExpr::parse(iter)?),
-                            // If we didn't do this hack,
-                            // the grammar wouldn't be LL(1).
-                            {
-                                if starts_spec(iter) {
-                                    Some(Box::new(Spec::parse(iter)?))
-                                } else {
-                                    None
-                                }
-                            },
+                            try_parse_spec(iter)?,
                         ),
                     });
                 }
                 TokType::LBracket => {
                     return Ok(Spec {
                         string,
-                        spectype: SpecType::Variant(Box::new(VariantExpr::parse(iter)?), {
-                            if starts_spec(iter) {
-                                Some(Box::new(Spec::parse(iter)?))
-                            } else {
-                                None
-                            }
-                        }),
+                        spectype: SpecType::Variant(
+                            Box::new(VariantExpr::parse(iter)?),
+                            try_parse_spec(iter)?,
+                        ),
                     });
                 }
                 _ => {}
