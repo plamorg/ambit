@@ -183,11 +183,9 @@ impl<'a> Iterator for SpecIter<'a> {
                 None
             };
         }
-        self.next_without_str().and_then(|rest| {
-            Some(match &self.spec.string {
-                Some(s) => PairTree::pair(s.as_str().into(), rest),
-                None => rest,
-            })
+        self.next_without_str().map(|rest| match &self.spec.string {
+            Some(s) => PairTree::pair(s.as_str().into(), rest),
+            None => rest,
         })
     }
 }
