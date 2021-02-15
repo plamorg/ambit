@@ -47,12 +47,10 @@ impl AmbitPath {
                 let mut file = match File::open(&self.path) {
                     Ok(file) => file,
                     Err(e) => {
-                        // Format error nicely to notify user of error from file open attempt
-                        return Err(AmbitError::Other(format!(
-                            "Failed to read `{}`\n\nCaused by:\n  {}",
-                            self.to_str()?,
-                            e
-                        )));
+                        return Err(AmbitError::File {
+                            path: String::from(self.to_str()?),
+                            error: e,
+                        })
                     }
                 };
                 let mut content = String::new();

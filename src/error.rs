@@ -13,16 +13,32 @@ pub enum AmbitError {
     //       Future changes may result in a Vec<ParseError> being returned.
     //       This should be taken care of.
     Parse(config::ParseError),
+    File { path: String, error: io::Error },
     Other(String),
 }
 
-impl Error for AmbitError {}
+impl Error for AmbitError {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        match self {
+            AmbitError::File { error, .. } => Some(error),
+            _ => None,
+        }
+    }
+}
 
 impl Display for AmbitError {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        match *self {
+        match &*self {
             AmbitError::Io(ref e) => e.fmt(f),
             AmbitError::Parse(ref e) => e.fmt(f),
+            AmbitError::File { path, .. } => f.write_str(
+                format!(
+                    "Failed to read `{}`\n\nCaused by:\n  {}",
+                    path,
+                    self.source().unwrap()
+                )
+                .as_str(),
+            ),
             AmbitError::Other(ref s) => f.write_str(&**s),
         }
     }
@@ -60,6 +76,21 @@ mod tests {
     fn display_io() {
         let err = AmbitError::Io(io::Error::new(io::ErrorKind::NotFound, "File not found"));
         assert_eq!(format!("{}", err), "File not found");
+    }
+
+    #[test]
+    fn display_file() {
+        let err = AmbitError::File {
+            path: "path".to_string(),
+            error: io::Error::new(io::ErrorKind::PermissionDenied, "Permission denied"),
+        };
+        assert_eq!(
+            format!("{}", err),
+            r#"Failed to read `path`
+
+Caused by:
+  Permission denied"#
+        )
     }
 
     #[test]
