@@ -44,7 +44,17 @@ impl AmbitPath {
     pub fn as_string(&self) -> AmbitResult<String> {
         match self.kind {
             AmbitPathKind::File => {
-                let mut file = File::open(&self.path)?;
+                let mut file = match File::open(&self.path) {
+                    Ok(file) => file,
+                    Err(e) => {
+                        // Format error nicely to notify user of error from file open attempt
+                        return Err(AmbitError::Other(format!(
+                            "Failed to read `{}`\n\nCaused by:\n  {}",
+                            self.to_str()?,
+                            e
+                        )));
+                    }
+                };
                 let mut content = String::new();
                 file.read_to_string(&mut content)?;
                 Ok(content)
@@ -87,7 +97,7 @@ impl AmbitPaths {
         let home = dirs::home_dir().expect("Could not get home directory");
         let configuration = home.join(".config/ambit");
 
-        let config = AmbitPath::new(configuration.join("config"), AmbitPathKind::File);
+        let config = AmbitPath::new(configuration.join("config.ambit"), AmbitPathKind::File);
         let repo = AmbitPath::new(configuration.join("repo"), AmbitPathKind::Directory);
         let git = AmbitPath::new(configuration.join("repo/.git"), AmbitPathKind::Directory);
 
