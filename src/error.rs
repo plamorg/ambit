@@ -13,6 +13,8 @@ pub enum AmbitError {
     //       Future changes may result in a Vec<ParseError> being returned.
     //       This should be taken care of.
     Parse(config::ParseError),
+    // File error is encountered on failed file open operation
+    // Provides additional path information
     File { path: String, error: io::Error },
     Other(String),
 }
@@ -28,19 +30,20 @@ impl Error for AmbitError {
 
 impl Display for AmbitError {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        match &*self {
+        let result = match self {
             AmbitError::Io(ref e) => e.fmt(f),
             AmbitError::Parse(ref e) => e.fmt(f),
-            AmbitError::File { path, .. } => f.write_str(
-                format!(
-                    "Failed to read `{}`\n\nCaused by:\n  {}",
-                    path,
-                    self.source().unwrap()
-                )
-                .as_str(),
-            ),
-            AmbitError::Other(ref s) => f.write_str(&**s),
+            AmbitError::File { path, .. } => f.write_fmt(format_args!("Failed to read `{}`", path)),
+            AmbitError::Other(ref s) => f.write_str(s.as_str()),
+        };
+        if result.is_err() {
+            // Error encountered from previous match
+            return result;
+        } else if let Some(source) = self.source() {
+            // Report error with additional causation if there is a source
+            f.write_fmt(format_args!("\n\nCaused by:\n  {}", source))?;
         }
+        Ok(())
     }
 }
 
