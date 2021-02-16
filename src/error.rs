@@ -30,16 +30,13 @@ impl Error for AmbitError {
 
 impl Display for AmbitError {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        let result = match self {
+        match self {
             AmbitError::Io(ref e) => e.fmt(f),
             AmbitError::Parse(ref e) => e.fmt(f),
             AmbitError::File { path, .. } => f.write_fmt(format_args!("Failed to read `{}`", path)),
             AmbitError::Other(ref s) => f.write_str(s.as_str()),
-        };
-        if result.is_err() {
-            // Error encountered from previous match
-            return result;
-        } else if let Some(source) = self.source() {
+        }?;
+        if let Some(source) = self.source() {
             // Report error with additional causation if there is a source
             f.write_fmt(format_args!("\n\nCaused by:\n  {}", source))?;
         }
