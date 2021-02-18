@@ -1,6 +1,7 @@
 pub mod ast;
 pub mod lexer;
 pub mod parser;
+pub mod strgen;
 
 pub use ast::Entry;
 use lexer::Lexer;
