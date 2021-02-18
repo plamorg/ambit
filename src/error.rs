@@ -1,6 +1,8 @@
-use std::error::Error;
-use std::fmt::{self, Display, Formatter};
-use std::{io, process};
+use std::{
+    error::Error,
+    fmt::{self, Display, Formatter},
+    io, process,
+};
 
 use crate::config;
 
@@ -15,7 +17,15 @@ pub enum AmbitError {
     Parse(config::ParseError),
     // File error is encountered on failed file open operation
     // Provides additional path information
-    File { path: String, error: io::Error },
+    File {
+        path: String,
+        error: io::Error,
+    },
+    Symlink {
+        host_file: String,
+        repo_file: String,
+        error: Box<AmbitError>,
+    },
     Other(String),
 }
 
@@ -23,6 +33,7 @@ impl Error for AmbitError {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         match self {
             AmbitError::File { error, .. } => Some(error),
+            AmbitError::Symlink { error, .. } => Some(error),
             _ => None,
         }
     }
@@ -33,7 +44,17 @@ impl Display for AmbitError {
         match self {
             AmbitError::Io(ref e) => e.fmt(f),
             AmbitError::Parse(ref e) => e.fmt(f),
-            AmbitError::File { path, .. } => f.write_fmt(format_args!("Failed to read `{}`", path)),
+            AmbitError::File { path, .. } => {
+                f.write_fmt(format_args!("File error with `{}`", path))
+            }
+            AmbitError::Symlink {
+                repo_file,
+                host_file,
+                ..
+            } => f.write_fmt(format_args!(
+                "Failed to symlink `{}` -> `{}`",
+                host_file, repo_file
+            )),
             AmbitError::Other(ref s) => f.write_str(s.as_str()),
         }?;
         if let Some(source) = self.source() {
@@ -86,7 +107,7 @@ mod tests {
         };
         assert_eq!(
             format!("{}", err),
-            r#"Failed to read `path`
+            r#"File error with `path`
 
 Caused by:
   Permission denied"#

@@ -58,7 +58,7 @@ impl AmbitPath {
                 Ok(content)
             }
             AmbitPathKind::Directory => Err(AmbitError::Other(
-                "Getting content of a directory is not supported".to_string(),
+                "Getting content of a directory is not supported".to_owned(),
             )),
         }
     }
@@ -85,6 +85,7 @@ impl AmbitPath {
 }
 
 pub struct AmbitPaths {
+    pub home: AmbitPath,
     pub config: AmbitPath,
     pub repo: AmbitPath,
     pub git: AmbitPath,
@@ -95,11 +96,12 @@ impl AmbitPaths {
         let home = dirs::home_dir().expect("Could not get home directory");
         let configuration = home.join(".config/ambit");
 
-        let config = AmbitPath::new(configuration.join("config.ambit"), AmbitPathKind::File);
-        let repo = AmbitPath::new(configuration.join("repo"), AmbitPathKind::Directory);
-        let git = AmbitPath::new(configuration.join("repo/.git"), AmbitPathKind::Directory);
-
-        AmbitPaths { config, repo, git }
+        AmbitPaths {
+            home: AmbitPath::new(home, AmbitPathKind::Directory),
+            config: AmbitPath::new(configuration.join("config.ambit"), AmbitPathKind::File),
+            repo: AmbitPath::new(configuration.join("repo"), AmbitPathKind::Directory),
+            git: AmbitPath::new(configuration.join("repo/.git"), AmbitPathKind::Directory),
+        }
     }
 }
 

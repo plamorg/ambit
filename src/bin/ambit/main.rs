@@ -1,103 +1,11 @@
+mod cmd;
 mod directories;
 
 use clap::{App, AppSettings, Arg, SubCommand};
 
 use std::process;
 
-use ambit::config;
-use ambit::error::{self, AmbitError, AmbitResult};
-use directories::AMBIT_PATHS;
-
-// Initialize config and repository directory
-fn ensure_paths_exist(force: bool) -> AmbitResult<()> {
-    if !AMBIT_PATHS.config.exists() {
-        AMBIT_PATHS.config.create()?;
-    }
-    if AMBIT_PATHS.repo.exists() && !force {
-        // Dotfile repository should not be overwritten if force is false
-        return Err(AmbitError::Other(
-            "Dotfile repository already exists.\nUse '-f' flag to overwrite.".to_string(),
-        ));
-    } else if AMBIT_PATHS.repo.exists() {
-        // Repository directory exists but force is enabled
-        AMBIT_PATHS.repo.remove()?;
-    }
-    Ok(())
-}
-
-// Fetch entries from config file and return as vector
-fn get_config_entries() -> AmbitResult<Vec<config::Entry>> {
-    let content = AMBIT_PATHS.config.as_string()?;
-    config::get_entries(content.chars().peekable())
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(AmbitError::Parse)
-}
-
-mod cmd {
-    use super::directories::AMBIT_PATHS;
-    use super::{ensure_paths_exist, get_config_entries};
-
-    use std::io::{self, Write};
-    use std::process::Command;
-
-    use ambit::error::{AmbitError, AmbitResult};
-
-    // Initialize an empty dotfile repository
-    pub fn init(force: bool) -> AmbitResult<()> {
-        ensure_paths_exist(force)?;
-        AMBIT_PATHS.repo.create()?;
-        // Initialize an empty git repository
-        git(vec!["init"])?;
-        Ok(())
-    }
-
-    // Clone an existing dotfile repository with given origin
-    pub fn clone(force: bool, arguments: Vec<&str>) -> AmbitResult<()> {
-        ensure_paths_exist(force)?;
-        // Clone will handle creating the repository directory
-        let repo_path = AMBIT_PATHS.repo.to_str()?;
-        let status = Command::new("git")
-            .arg("clone")
-            .args(arguments)
-            // Pass in ambit repo path as last argument to ensure that it is always cloned to the known path
-            .arg(repo_path)
-            .status()?;
-        match status.success() {
-            true => {
-                println!("Successfully cloned repository to {}", repo_path);
-                Ok(())
-            }
-            false => Err(AmbitError::Other("Failed to clone repository".to_string())),
-        }
-    }
-
-    // Check ambit configuration for errors
-    pub fn check() -> AmbitResult<()> {
-        get_config_entries()?;
-        Ok(())
-    }
-
-    // Sync files in dotfile repository to system through symbolic links
-    pub fn sync() -> AmbitResult<()> {
-        unimplemented!();
-    }
-
-    // Run git commands from the dotfile repository
-    pub fn git(arguments: Vec<&str>) -> AmbitResult<()> {
-        // The path to repository (git-dir) and the working tree (work-tree) is
-        // passed to ensure that git commands are run from the dotfile repository
-        let output = Command::new("git")
-            .args(&[
-                ["--git-dir=", AMBIT_PATHS.git.to_str()?].concat(),
-                ["--work-tree=", AMBIT_PATHS.repo.to_str()?].concat(),
-            ])
-            .args(arguments)
-            .output()?;
-        io::stdout().write_all(&output.stdout)?;
-        io::stdout().write_all(&output.stderr)?;
-        Ok(())
-    }
-}
+use ambit::error::{self, AmbitResult};
 
 // Return instance of ambit application
 fn get_app() -> App<'static, 'static> {
@@ -129,7 +37,18 @@ fn get_app() -> App<'static, 'static> {
         )
         .subcommand(
             SubCommand::with_name("sync")
-                .about("Sync files in dotfile repository to system through symbolic links"),
+                .about("Sync files in dotfile repository to system through symbolic links")
+                .arg(
+                    Arg::with_name("dry-run")
+                        .long("dry-run")
+                        .help("If set, do not actually symlink the files"),
+                )
+                .arg(
+                    Arg::with_name("quiet")
+                        .long("quiet")
+                        .short("q")
+                        .help("Don't report individual symlinks"),
+                ),
         )
         .subcommand(SubCommand::with_name("check").about("Check ambit configuration for errors"))
 }
@@ -150,8 +69,10 @@ fn run() -> AmbitResult<()> {
         cmd::git(git_arguments)?;
     } else if matches.is_present("check") {
         cmd::check()?;
-    } else if matches.is_present("sync") {
-        cmd::sync()?;
+    } else if let Some(matches) = matches.subcommand_matches("sync") {
+        let dry_run = matches.is_present("dry-run");
+        let quiet = matches.is_present("quiet");
+        cmd::sync(dry_run, quiet)?;
     }
     Ok(())
 }
