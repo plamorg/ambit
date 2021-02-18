@@ -242,9 +242,36 @@ impl VariantExpr {
     }
 }
 
+#[derive(Debug)]
+struct MatchIter<'a> {
+    expr: &'a MatchExpr,
+    spec_iter: Option<SpecIter<'a>>,
+}
+impl<'a> Iterator for MatchIter<'a> {
+    type Item = PairTree<&'a str>;
+    fn next(&mut self) -> Option<Self::Item> {
+        match self.spec_iter.as_mut() {
+            Some(iter) => iter.next(),
+            None => None,
+        }
+    }
+}
+impl Restartable for MatchIter<'_> {
+    fn restart(&mut self) {
+        if let Some(iter) = self.spec_iter.as_mut() {
+            iter.restart();
+        }
+    }
+}
 impl MatchExpr {
-    fn raw_iter(&self) -> SpecIter {
-        self.resolve().raw_iter()
+    fn raw_iter(&self) -> MatchIter {
+        MatchIter {
+            expr: &self,
+            spec_iter: match self.resolve() {
+                Some(spec) => Some(spec.raw_iter()),
+                None => None,
+            },
+        }
     }
 }
 
@@ -280,6 +307,33 @@ mod tests {
             Spec {
                 string: Some("d".to_owned()),
                 spectype: SpecType::match_expr(
+                    vec![
+                        (
+                            Expr {
+                                exprtype: if cfg!(windows) {
+                                    ExprType::Linux
+                                } else {
+                                    ExprType::Windows
+                                },
+                            },
+                            Spec::from("g"),
+                        ),
+                        (ExprType::Any.into(), Spec::from("e")),
+                    ],
+                    Some(Spec::from("f")),
+                ),
+            },
+            vec!["def"],
+        )
+    }
+
+    #[test]
+    fn match_that_cannot_resolve() {
+        results_in(
+            // Equivalent to `d{ incorrect-os: g, }f`.
+            Spec {
+                string: Some("d".to_owned()),
+                spectype: SpecType::match_expr(
                     vec![(
                         Expr {
                             exprtype: if cfg!(windows) {
@@ -290,11 +344,13 @@ mod tests {
                         },
                         Spec::from("g"),
                     )],
-                    Spec::from("e"),
                     Some(Spec::from("f")),
                 ),
             },
-            vec!["def"],
+            // Since the MatchExpr can't resolve to anything,
+            // there is nothing here.
+            // (At least, if the test _succeeds_.)
+            vec![],
         )
     }
 

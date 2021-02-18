@@ -203,21 +203,20 @@ impl MatchExpr {
         expect(iter, &[TokType::LBrace])?;
         let mut cases = Vec::new();
         loop {
-            if eat!(iter, "default") {
-                expect(iter, &[TokType::Colon])?;
-                let ret = MatchExpr {
-                    cases,
-                    default: Spec::parse(iter)?,
-                };
-                expect(iter, &[TokType::RBrace])?;
-                return Ok(ret);
+            // Allow trailing commas
+            if eat!(iter, RBrace) {
+                break;
             }
             let expr = Expr::parse(iter)?;
             expect(iter, &[TokType::Colon])?;
             let spec = Spec::parse(iter)?;
             cases.push((expr, spec));
+            if eat!(iter, RBrace) {
+                break;
+            }
             expect(iter, &[TokType::Comma])?;
         }
+        Ok(MatchExpr { cases })
     }
 }
 
@@ -242,6 +241,7 @@ impl Expr {
                         "linux" => return exprtype!(Linux),
                         "unix" => return exprtype!(Unix),
                         "bsd" => return exprtype!(Bsd),
+                        "default" => return exprtype!(Any),
                         _ => {}
                     }
                 }
@@ -299,7 +299,7 @@ mod tests {
         success(
             &toklist!["yes", TokType::Semicolon],
             &[Entry {
-                left: "yes".to_owned().into(),
+                left: Spec::from("yes"),
                 right: None,
             }],
         );
@@ -319,10 +319,7 @@ mod tests {
             &[Entry {
                 left: Spec {
                     string: None,
-                    spectype: SpecType::variant_expr(
-                        vec!["a".to_owned().into(), "b".to_owned().into()],
-                        None,
-                    ),
+                    spectype: SpecType::variant_expr(vec![Spec::from("a"), Spec::from("b")], None),
                 },
                 right: None,
             }],
@@ -349,14 +346,11 @@ mod tests {
                 left: Spec {
                     string: None,
                     spectype: SpecType::match_expr(
-                        vec![(
-                            Expr {
-                                exprtype: ExprType::Windows,
-                            },
-                            "a".to_owned().into(),
-                        )],
-                        "b".to_owned().into(),
-                        Some("c".to_owned().into()),
+                        vec![
+                            (ExprType::Windows.into(), Spec::from("a")),
+                            (ExprType::Any.into(), Spec::from("b")),
+                        ],
+                        Some(Spec::from("c")),
                     ),
                 },
                 right: None,
@@ -386,14 +380,14 @@ mod tests {
                 left: Spec {
                     string: Some("examples of ".to_owned()),
                     spectype: SpecType::variant_expr(
-                        vec!["gui".to_owned().into(), "cli".to_owned().into()],
+                        vec![Spec::from("gui"), Spec::from("cli")],
                         None,
                     ),
                 },
                 right: Some(Spec {
                     string: None,
                     spectype: SpecType::variant_expr(
-                        vec!["gvim".to_owned().into(), "ed".to_owned().into()],
+                        vec![Spec::from("gvim"), Spec::from("ed")],
                         None,
                     ),
                 }),
@@ -423,10 +417,7 @@ mod tests {
                         vec![Spec {
                             string: Some("kitty/".to_owned()),
                             spectype: SpecType::variant_expr(
-                                vec![
-                                    "kitty.conf".to_owned().into(),
-                                    "theme.conf".to_owned().into(),
-                                ],
+                                vec![Spec::from("kitty.conf"), Spec::from("theme.conf")],
                                 None,
                             ),
                         }],
@@ -436,6 +427,37 @@ mod tests {
                 right: None,
             }],
         );
+    }
+
+    #[test]
+    fn match_expr_without_default() {
+        success(
+            &toklist![
+                TokType::LBrace,
+                "linux",
+                TokType::Colon,
+                "a",
+                TokType::Comma,
+                "macos",
+                TokType::Colon,
+                "b",
+                TokType::RBrace,
+                TokType::Semicolon
+            ],
+            &[Entry {
+                left: Spec {
+                    string: None,
+                    spectype: SpecType::match_expr(
+                        vec![
+                            (ExprType::Linux.into(), Spec::from("a")),
+                            (ExprType::Macos.into(), Spec::from("b")),
+                        ],
+                        None,
+                    ),
+                },
+                right: None,
+            }],
+        )
     }
 
     #[test]
