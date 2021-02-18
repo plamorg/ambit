@@ -299,10 +299,7 @@ mod tests {
         success(
             &toklist!["yes", TokType::Semicolon],
             &[Entry {
-                left: Spec {
-                    string: Some("yes".to_owned()),
-                    spectype: SpecType::None,
-                },
+                left: "yes".to_owned().into(),
                 right: None,
             }],
         );
@@ -322,19 +319,8 @@ mod tests {
             &[Entry {
                 left: Spec {
                     string: None,
-                    spectype: SpecType::Variant(
-                        Box::new(VariantExpr {
-                            specs: vec![
-                                Spec {
-                                    string: Some("a".to_owned()),
-                                    spectype: SpecType::None,
-                                },
-                                Spec {
-                                    string: Some("b".to_owned()),
-                                    spectype: SpecType::None,
-                                },
-                            ],
-                        }),
+                    spectype: SpecType::variant_expr(
+                        vec!["a".to_owned().into(), "b".to_owned().into()],
                         None,
                     ),
                 },
@@ -362,26 +348,15 @@ mod tests {
             &[Entry {
                 left: Spec {
                     string: None,
-                    spectype: SpecType::Match(
-                        Box::new(MatchExpr {
-                            cases: vec![(
-                                Expr {
-                                    exprtype: ExprType::Windows,
-                                },
-                                Spec {
-                                    string: Some("a".to_owned()),
-                                    spectype: SpecType::None,
-                                },
-                            )],
-                            default: Spec {
-                                string: Some("b".to_owned()),
-                                spectype: SpecType::None,
+                    spectype: SpecType::match_expr(
+                        vec![(
+                            Expr {
+                                exprtype: ExprType::Windows,
                             },
-                        }),
-                        Some(Box::new(Spec {
-                            string: Some("c".to_owned()),
-                            spectype: SpecType::None,
-                        })),
+                            "a".to_owned().into(),
+                        )],
+                        "b".to_owned().into(),
+                        Some("c".to_owned().into()),
                     ),
                 },
                 right: None,
@@ -410,37 +385,15 @@ mod tests {
             &[Entry {
                 left: Spec {
                     string: Some("examples of ".to_owned()),
-                    spectype: SpecType::Variant(
-                        Box::new(VariantExpr {
-                            specs: vec![
-                                (Spec {
-                                    string: Some("gui".to_owned()),
-                                    spectype: SpecType::None,
-                                }),
-                                (Spec {
-                                    string: Some("cli".to_owned()),
-                                    spectype: SpecType::None,
-                                }),
-                            ],
-                        }),
+                    spectype: SpecType::variant_expr(
+                        vec!["gui".to_owned().into(), "cli".to_owned().into()],
                         None,
                     ),
                 },
                 right: Some(Spec {
                     string: None,
-                    spectype: SpecType::Variant(
-                        Box::new(VariantExpr {
-                            specs: vec![
-                                (Spec {
-                                    string: Some("gvim".to_owned()),
-                                    spectype: SpecType::None,
-                                }),
-                                (Spec {
-                                    string: Some("ed".to_owned()),
-                                    spectype: SpecType::None,
-                                }),
-                            ],
-                        }),
+                    spectype: SpecType::variant_expr(
+                        vec!["gvim".to_owned().into(), "ed".to_owned().into()],
                         None,
                     ),
                 }),
@@ -466,27 +419,17 @@ mod tests {
             &[Entry {
                 left: Spec {
                     string: Some(".config/".to_owned()),
-                    spectype: SpecType::Variant(
-                        Box::new(VariantExpr {
-                            specs: vec![Spec {
-                                string: Some("kitty/".to_owned()),
-                                spectype: SpecType::Variant(
-                                    Box::new(VariantExpr {
-                                        specs: vec![
-                                            Spec {
-                                                string: Some("kitty.conf".to_owned()),
-                                                spectype: SpecType::None,
-                                            },
-                                            Spec {
-                                                string: Some("theme.conf".to_owned()),
-                                                spectype: SpecType::None,
-                                            },
-                                        ],
-                                    }),
-                                    None,
-                                ),
-                            }],
-                        }),
+                    spectype: SpecType::variant_expr(
+                        vec![Spec {
+                            string: Some("kitty/".to_owned()),
+                            spectype: SpecType::variant_expr(
+                                vec![
+                                    "kitty.conf".to_owned().into(),
+                                    "theme.conf".to_owned().into(),
+                                ],
+                                None,
+                            ),
+                        }],
                         None,
                     ),
                 },

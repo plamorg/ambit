@@ -16,7 +16,6 @@ pub enum SpecType {
     Variant(Box<VariantExpr>, Option<Box<Spec>>),
     Match(Box<MatchExpr>, Option<Box<Spec>>),
 }
-
 impl Spec {
     // Returns None if the nr. of options is larger than usize::MAX.
     pub fn nr_of_options(&self) -> Option<usize> {
@@ -32,6 +31,22 @@ impl Spec {
                 exprnr.checked_mul(specnr)
             }
         }
+    }
+}
+impl From<String> for Spec {
+    fn from(s: String) -> Self {
+        Spec {
+            string: Some(s),
+            spectype: SpecType::None,
+        }
+    }
+}
+impl SpecType {
+    pub fn variant_expr(specs: Vec<Spec>, rest: Option<Spec>) -> Self {
+        SpecType::Variant(Box::new(VariantExpr { specs }), rest.map(Box::new))
+    }
+    pub fn match_expr(cases: Vec<(Expr, Spec)>, default: Spec, rest: Option<Spec>) -> Self {
+        SpecType::Match(Box::new(MatchExpr { cases, default }), rest.map(Box::new))
     }
 }
 

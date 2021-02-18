@@ -10,19 +10,25 @@ where
     fn restart(&mut self);
 }
 
-/* A tree of pairs.
+/* A binary tree that only stores
+ * information in its leaf nodes.
+ * Can be thought of as "nested pairs of items",
+ * e.g. (("x", ("a", "r")), "y").
  * (This exists to increase the efficiency
  * of iteration for a Spec.)
  */
 #[derive(Debug, PartialEq, Eq, Clone)]
 enum PairTree<T> {
-    Val(T),
+    Value(T),
     Pair(Box<PairTree<T>>, Box<PairTree<T>>),
+    // Exists to allow `Rc` nodes in the tree.
+    // (Used if a pre-calculated value must be iterated
+    // through again.)
     Rc(Rc<PairTree<T>>),
 }
 impl<T> PairTree<T> {
-    pub fn val(v: T) -> Self {
-        PairTree::Val(v)
+    pub fn value(v: T) -> Self {
+        PairTree::Value(v)
     }
     pub fn pair(left: PairTree<T>, right: PairTree<T>) -> Self {
         PairTree::Pair(Box::new(left), Box::new(right))
@@ -31,9 +37,33 @@ impl<T> PairTree<T> {
         PairTree::Rc(Rc::clone(tree))
     }
 }
+impl<'a> PairTree<&'a str> {
+    pub fn flatten_to_string(&self) -> String {
+        fn get_total_length(tree: &PairTree<&str>) -> usize {
+            match tree {
+                PairTree::Value(val) => val.len(),
+                PairTree::Pair(left, right) => get_total_length(left) + get_total_length(right),
+                PairTree::Rc(rc_val) => get_total_length(rc_val),
+            }
+        }
+        fn construct_string(tree: &PairTree<&str>, result_string: &mut String) {
+            match tree {
+                PairTree::Value(val) => *result_string += val,
+                PairTree::Pair(left, right) => {
+                    construct_string(left, result_string);
+                    construct_string(right, result_string);
+                }
+                PairTree::Rc(tree) => construct_string(tree, result_string),
+            }
+        }
+        let mut result = String::with_capacity(get_total_length(self));
+        construct_string(self, &mut result);
+        result
+    }
+}
 impl<T> From<T> for PairTree<T> {
     fn from(s: T) -> Self {
-        Self::Val(s)
+        Self::Value(s)
     }
 }
 impl<T> From<(Box<PairTree<T>>, Box<PairTree<T>>)> for PairTree<T> {
@@ -48,28 +78,8 @@ pub struct SpecStrIter<'a> {
 impl<'a> Iterator for SpecStrIter<'a> {
     type Item = String;
     fn next(&mut self) -> Option<Self::Item> {
-        fn get_str_size(tree: &PairTree<&str>) -> usize {
-            match tree {
-                PairTree::Pair(left, right) => get_str_size(left) + get_str_size(right),
-                PairTree::Rc(tree) => get_str_size(tree),
-                PairTree::Val(s) => s.len(),
-            }
-        }
-        fn construct_str(ret: &mut String, tree: &PairTree<&str>) {
-            match tree {
-                PairTree::Pair(left, right) => {
-                    construct_str(ret, left);
-                    construct_str(ret, right);
-                }
-                PairTree::Rc(tree) => construct_str(ret, tree),
-                PairTree::Val(s) => *ret += s,
-            }
-        }
         let tree = self.iter.next()?;
-        let mut ret = String::new();
-        ret.reserve(get_str_size(&tree));
-        construct_str(&mut ret, &tree);
-        Some(ret)
+        Some(tree.flatten_to_string())
     }
 }
 
@@ -95,7 +105,7 @@ struct SpecIter<'a> {
     expr_iter: Option<Box<dyn Restartable<Item = PairTree<&'a str>> + 'a>>,
     curr_expr: Option<Rc<PairTree<&'a str>>>,
     spec_iter: Option<Box<SpecIter<'a>>>,
-    string_emitted: bool,
+    should_emit_string: bool,
 }
 impl<'a> SpecIter<'a> {
     pub fn new(spec: &'a Spec) -> Self {
@@ -104,14 +114,11 @@ impl<'a> SpecIter<'a> {
             curr_expr: None,
             expr_iter: None,
             spec_iter: None,
-            string_emitted: false,
+            should_emit_string: true,
         };
-        ret.init();
+        ret.init_expr_iter();
+        ret.init_spec_iter();
         ret
-    }
-    fn init(&mut self) {
-        self.init_expr_iter();
-        self.init_spec_iter();
     }
     fn init_expr_iter(&mut self) {
         self.expr_iter = match &self.spec.spectype {
@@ -133,10 +140,7 @@ impl<'a> SpecIter<'a> {
         if self.spec.spectype == SpecType::None {
             return None;
         }
-        let expr_iter = self
-            .expr_iter
-            .as_mut()
-            .expect("expr_iter must be accessible");
+        let expr_iter = self.expr_iter.as_mut().expect("expr_iter must exist");
         if let Some(spec_iter) = self.spec_iter.as_mut() {
             // We have to deal with the rest of this Spec.
             loop {
@@ -169,16 +173,19 @@ impl<'a> Restartable for SpecIter<'a> {
             spec_iter.restart();
         }
         self.curr_expr = None;
-        self.string_emitted = false;
+        self.should_emit_string = true;
     }
 }
 impl<'a> Iterator for SpecIter<'a> {
     type Item = PairTree<&'a str>;
     fn next(&mut self) -> Option<Self::Item> {
         if self.spec.spectype == SpecType::None {
-            return if !self.string_emitted {
-                self.string_emitted = true;
-                self.spec.string.as_ref().map(|x| PairTree::val(x.as_str()))
+            return if self.should_emit_string {
+                self.should_emit_string = false;
+                self.spec
+                    .string
+                    .as_ref()
+                    .map(|x| PairTree::value(x.as_str()))
             } else {
                 None
             };
@@ -193,29 +200,32 @@ impl<'a> Iterator for SpecIter<'a> {
 #[derive(Debug)]
 struct VariantIter<'a> {
     expr: &'a VariantExpr,
-    curr: Option<Box<SpecIter<'a>>>,
-    idx: usize,
+    // The current variant's iterator.
+    curr_iter: Option<Box<SpecIter<'a>>>,
+    // The index after the current variant.
+    index: usize,
 }
 impl<'a> Restartable for VariantIter<'a> {
     fn restart(&mut self) {
-        self.curr = None;
-        self.idx = 0;
+        self.curr_iter = None;
+        self.index = 0;
     }
 }
 impl<'a> Iterator for VariantIter<'a> {
     type Item = PairTree<&'a str>;
     fn next(&mut self) -> Option<Self::Item> {
         loop {
-            if let Some(ret) = self.curr.as_mut().and_then(|iter| iter.next()) {
+            // TODO: fix name
+            if let Some(ret) = self.curr_iter.as_mut().and_then(|iter| iter.next()) {
                 return Some(ret);
             } else {
                 // This variant's iterator is finished, move on to the next one.
-                if self.idx >= self.expr.specs.len() {
+                if self.index >= self.expr.specs.len() {
                     // We're completely done.
                     return None;
                 }
-                self.curr = Some(Box::new(self.expr.specs[self.idx].raw_iter()));
-                self.idx += 1;
+                self.curr_iter = Some(Box::new(self.expr.specs[self.index].raw_iter()));
+                self.index += 1;
             }
         }
     }
@@ -225,8 +235,8 @@ impl VariantExpr {
     fn raw_iter(&self) -> VariantIter {
         VariantIter {
             expr: self,
-            curr: None,
-            idx: 0,
+            curr_iter: None,
+            index: 0,
         }
     }
 }
@@ -248,13 +258,7 @@ mod tests {
 
     #[test]
     fn basic_string() {
-        results_in(
-            Spec {
-                spectype: SpecType::None,
-                string: Some("abc".to_owned()),
-            },
-            vec!["abc"],
-        );
+        results_in("abc".to_owned().into(), vec!["abc"]);
     }
 
     #[test]
@@ -262,19 +266,8 @@ mod tests {
         results_in(
             Spec {
                 string: Some("a".to_owned()),
-                spectype: SpecType::Variant(
-                    Box::new(VariantExpr {
-                        specs: vec![
-                            Spec {
-                                spectype: SpecType::None,
-                                string: Some("b".to_owned()),
-                            },
-                            Spec {
-                                spectype: SpecType::None,
-                                string: Some("c".to_owned()),
-                            },
-                        ],
-                    }),
+                spectype: SpecType::variant_expr(
+                    vec!["b".to_owned().into(), "c".to_owned().into()],
                     None,
                 ),
             },
@@ -288,30 +281,19 @@ mod tests {
             // Equivalent to `d{ incorrect-os: g, default: e }f`.
             Spec {
                 string: Some("d".to_owned()),
-                spectype: SpecType::Match(
-                    Box::new(MatchExpr {
-                        cases: vec![(
-                            Expr {
-                                exprtype: if cfg!(windows) {
-                                    ExprType::Linux
-                                } else {
-                                    ExprType::Windows
-                                },
+                spectype: SpecType::match_expr(
+                    vec![(
+                        Expr {
+                            exprtype: if cfg!(windows) {
+                                ExprType::Linux
+                            } else {
+                                ExprType::Windows
                             },
-                            Spec {
-                                string: Some("g".to_owned()),
-                                spectype: SpecType::None,
-                            },
-                        )],
-                        default: Spec {
-                            string: Some("e".to_owned()),
-                            spectype: SpecType::None,
                         },
-                    }),
-                    Some(Box::new(Spec {
-                        string: Some("f".to_owned()),
-                        spectype: SpecType::None,
-                    })),
+                        "g".to_owned().into(),
+                    )],
+                    "e".to_owned().into(),
+                    Some("f".to_owned().into()),
                 ),
             },
             vec!["def"],
@@ -324,55 +306,28 @@ mod tests {
             // Equivalent to `a[b, c[d[e, f], g], h]i`.
             Spec {
                 string: Some("a".to_owned()),
-                spectype: SpecType::Variant(
-                    Box::new(VariantExpr {
-                        specs: vec![
-                            Spec {
-                                string: Some("b".to_owned()),
-                                spectype: SpecType::None,
-                            },
-                            Spec {
-                                string: Some("c".to_owned()),
-                                spectype: SpecType::Variant(
-                                    Box::new(VariantExpr {
-                                        specs: vec![
-                                            Spec {
-                                                string: Some("d".to_owned()),
-                                                spectype: SpecType::Variant(
-                                                    Box::new(VariantExpr {
-                                                        specs: vec![
-                                                            Spec {
-                                                                string: Some("e".to_string()),
-                                                                spectype: SpecType::None,
-                                                            },
-                                                            Spec {
-                                                                string: Some("f".to_string()),
-                                                                spectype: SpecType::None,
-                                                            },
-                                                        ],
-                                                    }),
-                                                    None,
-                                                ),
-                                            },
-                                            Spec {
-                                                string: Some("g".to_string()),
-                                                spectype: SpecType::None,
-                                            },
-                                        ],
-                                    }),
-                                    None,
-                                ),
-                            },
-                            Spec {
-                                string: Some("h".to_string()),
-                                spectype: SpecType::None,
-                            },
-                        ],
-                    }),
-                    Some(Box::new(Spec {
-                        string: Some("i".to_owned()),
-                        spectype: SpecType::None,
-                    })),
+                spectype: SpecType::variant_expr(
+                    vec![
+                        "b".to_owned().into(),
+                        Spec {
+                            string: Some("c".to_owned()),
+                            spectype: SpecType::variant_expr(
+                                vec![
+                                    Spec {
+                                        string: Some("d".to_owned()),
+                                        spectype: SpecType::variant_expr(
+                                            vec!["e".to_owned().into(), "f".to_owned().into()],
+                                            None,
+                                        ),
+                                    },
+                                    "g".to_owned().into(),
+                                ],
+                                None,
+                            ),
+                        },
+                        "h".to_owned().into(),
+                    ],
+                    Some("i".to_owned().into()),
                 ),
             },
             vec!["abi", "acdei", "acdfi", "acgi", "ahi"],
@@ -395,66 +350,33 @@ mod tests {
             // Equivalent to `[a,b,c][d,e,f][g,h,i]`.
             Spec {
                 string: None,
-                spectype: SpecType::Variant(
-                    Box::new(VariantExpr {
-                        specs: vec![
-                            Spec {
-                                string: Some("a".to_owned()),
-                                spectype: SpecType::None,
-                            },
-                            Spec {
-                                string: Some("b".to_owned()),
-                                spectype: SpecType::None,
-                            },
-                            Spec {
-                                string: Some("c".to_owned()),
-                                spectype: SpecType::None,
-                            },
-                        ],
-                    }),
-                    Some(Box::new(Spec {
-                        spectype: SpecType::Variant(
-                            Box::new(VariantExpr {
-                                specs: vec![
-                                    Spec {
-                                        string: Some("d".to_owned()),
-                                        spectype: SpecType::None,
-                                    },
-                                    Spec {
-                                        string: Some("e".to_owned()),
-                                        spectype: SpecType::None,
-                                    },
-                                    Spec {
-                                        string: Some("f".to_owned()),
-                                        spectype: SpecType::None,
-                                    },
-                                ],
-                            }),
-                            Some(Box::new(Spec {
+                spectype: SpecType::variant_expr(
+                    vec![
+                        "a".to_owned().into(),
+                        "b".to_owned().into(),
+                        "c".to_owned().into(),
+                    ],
+                    Some(Spec {
+                        spectype: SpecType::variant_expr(
+                            vec![
+                                "d".to_owned().into(),
+                                "e".to_owned().into(),
+                                "f".to_owned().into(),
+                            ],
+                            Some(Spec {
                                 string: None,
-                                spectype: SpecType::Variant(
-                                    Box::new(VariantExpr {
-                                        specs: vec![
-                                            Spec {
-                                                string: Some("g".to_owned()),
-                                                spectype: SpecType::None,
-                                            },
-                                            Spec {
-                                                string: Some("h".to_owned()),
-                                                spectype: SpecType::None,
-                                            },
-                                            Spec {
-                                                string: Some("i".to_owned()),
-                                                spectype: SpecType::None,
-                                            },
-                                        ],
-                                    }),
+                                spectype: SpecType::variant_expr(
+                                    vec![
+                                        "g".to_owned().into(),
+                                        "h".to_owned().into(),
+                                        "i".to_owned().into(),
+                                    ],
                                     None,
                                 ),
-                            })),
+                            }),
                         ),
                         string: None,
-                    })),
+                    }),
                 ),
             },
             res_vec_str,
