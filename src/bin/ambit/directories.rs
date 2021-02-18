@@ -100,7 +100,10 @@ impl AmbitPaths {
             home: AmbitPath::new(home, AmbitPathKind::Directory),
             config: AmbitPath::new(configuration.join("config.ambit"), AmbitPathKind::File),
             repo: AmbitPath::new(configuration.join("repo"), AmbitPathKind::Directory),
-            git: AmbitPath::new(configuration.join("repo/.git"), AmbitPathKind::Directory),
+            git: AmbitPath::new(
+                configuration.join("repo").join(".git"),
+                AmbitPathKind::Directory,
+            ),
         }
     }
 }

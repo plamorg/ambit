@@ -58,8 +58,7 @@ pub fn clone(force: bool, arguments: Vec<&str>) -> AmbitResult<()> {
     let status = Command::new("git")
         .arg("clone")
         .args(arguments)
-        // Pass in ambit repo path as last argument to ensure that it is always cloned to the known path
-        .arg(repo_path)
+        .args(vec!["--", repo_path])
         .status()?;
     match status.success() {
         true => {
@@ -84,9 +83,8 @@ pub fn sync(dry_run: bool, quiet: bool) -> AmbitResult<()> {
             "Dotfile repository does not exist. Run `init` or `clone` before syncing.".to_owned(),
         ));
     }
-    let mut successful_symlinks = 0; // Number of symlinks that actually occurred
-    let mut total_symlinks = 0;
-    // link is a closure as it must have access to outside variables
+    let mut successful_symlinks: usize = 0; // Number of symlinks that actually occurred
+    let mut total_symlinks: usize = 0;
     let mut link = |repo_filename: &str, host_filename: &str| -> AmbitResult<()> {
         let host_file = AmbitPath::new(
             AMBIT_PATHS.home.path.join(host_filename),
@@ -100,11 +98,9 @@ pub fn sync(dry_run: bool, quiet: bool) -> AmbitResult<()> {
         let repo_file_str = repo_file.to_str()?;
 
         // already_symlinked holds whether host_file already links to repo_file
-        let already_symlinked = if let Ok(link_path) = fs::read_link(&host_file.path) {
-            link_path == repo_file.path
-        } else {
-            false
-        };
+        let already_symlinked = fs::read_link(&host_file.path)
+            .map(|link_path| link_path == repo_file.path)
+            .unwrap_or(false);
 
         if host_file.exists() && !already_symlinked {
             // Host file already exists but is not symlinked correctly
@@ -115,7 +111,8 @@ pub fn sync(dry_run: bool, quiet: bool) -> AmbitResult<()> {
                     "Host file already exists and is not correctly symlinked".to_owned(),
                 )),
             });
-        } else if !repo_file.exists() {
+        }
+        if !repo_file.exists() {
             return Err(AmbitError::Symlink {
                 host_file: host_file_str.to_owned(),
                 repo_file: repo_file_str.to_owned(),
@@ -123,7 +120,8 @@ pub fn sync(dry_run: bool, quiet: bool) -> AmbitResult<()> {
                     "Repository file does not exist".to_owned(),
                 )),
             });
-        } else if !already_symlinked {
+        }
+        if !already_symlinked {
             if !dry_run {
                 // Attempt to perform symlink
                 if let Err(e) = symlink(&repo_file.path, &host_file.path) {
@@ -145,12 +143,11 @@ pub fn sync(dry_run: bool, quiet: bool) -> AmbitResult<()> {
     };
     let entries = get_config_entries()?;
     for entry in entries {
-        let left_specs = entry.left.into_iter();
+        let left_paths = entry.left.into_iter();
         match entry.right {
-            Some(right_specs) => {
-                let right_specs = right_specs.into_iter();
-                for path_pair in left_specs.zip(right_specs) {
-                    let (repo_file, host_file) = path_pair;
+            Some(right_spec) => {
+                let right_paths = right_spec.into_iter();
+                for (repo_file, host_file) in left_paths.zip(right_paths) {
                     // Attempt to link REPO/left => HOME/right.
                     link(&repo_file, &host_file)?;
                 }
@@ -158,7 +155,7 @@ pub fn sync(dry_run: bool, quiet: bool) -> AmbitResult<()> {
             None => {
                 // If there is no right spec, the path from home directory is equal to left spec.
                 // Hence, we effectively link REPO/left => HOME/left.
-                for file in left_specs {
+                for file in left_paths {
                     link(&file, &file)?;
                 }
             }
