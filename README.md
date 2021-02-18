@@ -36,7 +36,7 @@ For example, to show the working tree status of the repository:
 
 ## Configuration
 
-`ambit` will search for a configuration file located at `${HOME}/.config/ambit/config`.
+`ambit` will search for a configuration file located at `${HOME}/.config/ambit/config.ambit`.
 
 ## Installation
 
