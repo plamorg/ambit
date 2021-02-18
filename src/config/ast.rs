@@ -41,6 +41,14 @@ impl From<String> for Spec {
         }
     }
 }
+impl From<&str> for Spec {
+    fn from(s: &str) -> Self {
+        Spec {
+            string: Some(s.to_owned()),
+            spectype: SpecType::None,
+        }
+    }
+}
 impl SpecType {
     pub fn variant_expr(specs: Vec<Spec>, rest: Option<Spec>) -> Self {
         SpecType::Variant(Box::new(VariantExpr { specs }), rest.map(Box::new))

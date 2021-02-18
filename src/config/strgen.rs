@@ -215,15 +215,16 @@ impl<'a> Iterator for VariantIter<'a> {
     type Item = PairTree<&'a str>;
     fn next(&mut self) -> Option<Self::Item> {
         loop {
-            // TODO: fix name
-            if let Some(ret) = self.curr_iter.as_mut().and_then(|iter| iter.next()) {
-                return Some(ret);
+            // Check if the current variant's iterator exists and is producing something.
+            if let Some(curr_result) = self.curr_iter.as_mut().and_then(|iter| iter.next()) {
+                return Some(curr_result);
             } else {
-                // This variant's iterator is finished, move on to the next one.
+                // This variant's iterator is finished.
                 if self.index >= self.expr.specs.len() {
-                    // We're completely done.
+                    // We have no more variants to go through.
                     return None;
                 }
+                // Advance to the next variant's iterator.
                 self.curr_iter = Some(Box::new(self.expr.specs[self.index].raw_iter()));
                 self.index += 1;
             }
@@ -258,7 +259,7 @@ mod tests {
 
     #[test]
     fn basic_string() {
-        results_in("abc".to_owned().into(), vec!["abc"]);
+        results_in(Spec::from("abc"), vec!["abc"]);
     }
 
     #[test]
@@ -266,10 +267,7 @@ mod tests {
         results_in(
             Spec {
                 string: Some("a".to_owned()),
-                spectype: SpecType::variant_expr(
-                    vec!["b".to_owned().into(), "c".to_owned().into()],
-                    None,
-                ),
+                spectype: SpecType::variant_expr(vec![Spec::from("b"), Spec::from("c")], None),
             },
             vec!["ab", "ac"],
         )
@@ -290,10 +288,10 @@ mod tests {
                                 ExprType::Windows
                             },
                         },
-                        "g".to_owned().into(),
+                        Spec::from("g"),
                     )],
-                    "e".to_owned().into(),
-                    Some("f".to_owned().into()),
+                    Spec::from("e"),
+                    Some(Spec::from("f")),
                 ),
             },
             vec!["def"],
@@ -308,7 +306,7 @@ mod tests {
                 string: Some("a".to_owned()),
                 spectype: SpecType::variant_expr(
                     vec![
-                        "b".to_owned().into(),
+                        Spec::from("b"),
                         Spec {
                             string: Some("c".to_owned()),
                             spectype: SpecType::variant_expr(
@@ -316,18 +314,18 @@ mod tests {
                                     Spec {
                                         string: Some("d".to_owned()),
                                         spectype: SpecType::variant_expr(
-                                            vec!["e".to_owned().into(), "f".to_owned().into()],
+                                            vec![Spec::from("e"), Spec::from("f")],
                                             None,
                                         ),
                                     },
-                                    "g".to_owned().into(),
+                                    Spec::from("g"),
                                 ],
                                 None,
                             ),
                         },
-                        "h".to_owned().into(),
+                        Spec::from("h"),
                     ],
-                    Some("i".to_owned().into()),
+                    Some(Spec::from("i")),
                 ),
             },
             vec!["abi", "acdei", "acdfi", "acgi", "ahi"],
@@ -351,26 +349,14 @@ mod tests {
             Spec {
                 string: None,
                 spectype: SpecType::variant_expr(
-                    vec![
-                        "a".to_owned().into(),
-                        "b".to_owned().into(),
-                        "c".to_owned().into(),
-                    ],
+                    vec![Spec::from("a"), Spec::from("b"), Spec::from("c")],
                     Some(Spec {
                         spectype: SpecType::variant_expr(
-                            vec![
-                                "d".to_owned().into(),
-                                "e".to_owned().into(),
-                                "f".to_owned().into(),
-                            ],
+                            vec![Spec::from("d"), Spec::from("e"), Spec::from("f")],
                             Some(Spec {
                                 string: None,
                                 spectype: SpecType::variant_expr(
-                                    vec![
-                                        "g".to_owned().into(),
-                                        "h".to_owned().into(),
-                                        "i".to_owned().into(),
-                                    ],
+                                    vec![Spec::from("g"), Spec::from("h"), Spec::from("i")],
                                     None,
                                 ),
                             }),
