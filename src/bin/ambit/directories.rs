@@ -48,7 +48,7 @@ impl AmbitPath {
                     Ok(file) => file,
                     Err(e) => {
                         return Err(AmbitError::File {
-                            path: String::from(self.to_str()?),
+                            path: self.path.clone(),
                             error: e,
                         })
                     }
