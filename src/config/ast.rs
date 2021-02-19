@@ -53,8 +53,8 @@ impl SpecType {
     pub fn variant_expr(specs: Vec<Spec>, rest: Option<Spec>) -> Self {
         SpecType::Variant(Box::new(VariantExpr { specs }), rest.map(Box::new))
     }
-    pub fn match_expr(cases: Vec<(Expr, Spec)>, default: Spec, rest: Option<Spec>) -> Self {
-        SpecType::Match(Box::new(MatchExpr { cases, default }), rest.map(Box::new))
+    pub fn match_expr(cases: Vec<(Expr, Spec)>, rest: Option<Spec>) -> Self {
+        SpecType::Match(Box::new(MatchExpr { cases }), rest.map(Box::new))
     }
 }
 
@@ -76,27 +76,26 @@ impl VariantExpr {
 #[derive(PartialEq, Eq, Debug, Clone)]
 pub struct MatchExpr {
     pub cases: Vec<(Expr, Spec)>,
-    pub default: Spec,
 }
 impl MatchExpr {
-    pub fn resolve(&self) -> &Spec {
-        use std::env::consts::OS;
-        let os = match OS {
+    pub fn resolve(&self) -> Option<&Spec> {
+        let os = match std::env::consts::OS {
             "linux" => Some(ExprType::Linux),
             "windows" => Some(ExprType::Windows),
             "macos" => Some(ExprType::Macos),
             "freebsd" | "netbsd" | "openbsd" => Some(ExprType::Bsd),
             _ => None,
         };
-        for case in &self.cases {
-            if (cfg!(unix) && case.0.exprtype == ExprType::Unix)
-                || os.as_ref().map(|x| *x == case.0.exprtype).unwrap_or(false)
+        for (expr, spec) in &self.cases {
+            if (cfg!(unix) && expr.exprtype == ExprType::Unix) // is unix
+                || os.as_ref().map(|x| *x == expr.exprtype).unwrap_or(false) // OS matches the expr
+                || expr.exprtype == ExprType::Any
             {
                 // it matches
-                return &case.1;
+                return Some(&spec);
             }
         }
-        &self.default
+        None
     }
 }
 
@@ -112,4 +111,12 @@ pub enum ExprType {
     Macos,
     Unix,
     Bsd,
+    // The "Default" exprtype,
+    // so-named due to conflicts with the Default iterator.
+    Any,
+}
+impl From<ExprType> for Expr {
+    fn from(exprtype: ExprType) -> Expr {
+        Expr { exprtype }
+    }
 }
