@@ -79,22 +79,20 @@ pub struct MatchExpr {
 }
 impl MatchExpr {
     pub fn resolve(&self) -> Option<&Spec> {
-        use std::env::consts::OS;
-        let os = match OS {
+        let os = match std::env::consts::OS {
             "linux" => Some(ExprType::Linux),
             "windows" => Some(ExprType::Windows),
             "macos" => Some(ExprType::Macos),
             "freebsd" | "netbsd" | "openbsd" => Some(ExprType::Bsd),
             _ => None,
         };
-        for case in &self.cases {
-            if (cfg!(unix) && case.0.exprtype == ExprType::Unix) // is unix
-                || os.as_ref().map(|x| *x == case.0.exprtype).unwrap_or(false) // OS matches the expr
-                || case.0.exprtype == ExprType::Any
-            // this expr is the default one
+        for (expr, spec) in &self.cases {
+            if (cfg!(unix) && expr.exprtype == ExprType::Unix) // is unix
+                || os.as_ref().map(|x| *x == expr.exprtype).unwrap_or(false) // OS matches the expr
+                || expr.exprtype == ExprType::Any
             {
                 // it matches
-                return Some(&case.1);
+                return Some(&spec);
             }
         }
         None
@@ -113,10 +111,25 @@ pub enum ExprType {
     Macos,
     Unix,
     Bsd,
+    // The "Default" exprtype,
+    // so-named due to conflicts with the Default iterator.
     Any,
 }
 impl From<ExprType> for Expr {
     fn from(exprtype: ExprType) -> Expr {
         Expr { exprtype }
+    }
+}
+// To help test resolution.
+#[cfg(test)]
+impl Expr {
+    pub fn incorrect_os() -> Self {
+        Expr {
+            exprtype: if cfg!(windows) {
+                ExprType::Linux
+            } else {
+                ExprType::Windows
+            },
+        }
     }
 }

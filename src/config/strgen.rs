@@ -308,16 +308,7 @@ mod tests {
                 string: Some("d".to_owned()),
                 spectype: SpecType::match_expr(
                     vec![
-                        (
-                            Expr {
-                                exprtype: if cfg!(windows) {
-                                    ExprType::Linux
-                                } else {
-                                    ExprType::Windows
-                                },
-                            },
-                            Spec::from("g"),
-                        ),
+                        (Expr::incorrect_os(), Spec::from("g")),
                         (ExprType::Any.into(), Spec::from("e")),
                     ],
                     Some(Spec::from("f")),
@@ -328,22 +319,13 @@ mod tests {
     }
 
     #[test]
-    fn match_that_cannot_resolve() {
+    fn unresolvable_match() {
         results_in(
             // Equivalent to `d{ incorrect-os: g, }f`.
             Spec {
                 string: Some("d".to_owned()),
                 spectype: SpecType::match_expr(
-                    vec![(
-                        Expr {
-                            exprtype: if cfg!(windows) {
-                                ExprType::Linux
-                            } else {
-                                ExprType::Windows
-                            },
-                        },
-                        Spec::from("g"),
-                    )],
+                    vec![(Expr::incorrect_os(), Spec::from("g"))],
                     Some(Spec::from("f")),
                 ),
             },
