@@ -120,16 +120,3 @@ impl From<ExprType> for Expr {
         Expr { exprtype }
     }
 }
-// To help test resolution.
-#[cfg(test)]
-impl Expr {
-    pub fn incorrect_os() -> Self {
-        Expr {
-            exprtype: if cfg!(windows) {
-                ExprType::Linux
-            } else {
-                ExprType::Windows
-            },
-        }
-    }
-}

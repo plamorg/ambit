@@ -284,6 +284,16 @@ mod tests {
         assert_eq!(yielded, expected);
     }
 
+    fn incorrect_os() -> Expr {
+        Expr {
+            exprtype: if cfg!(windows) {
+                ExprType::Linux
+            } else {
+                ExprType::Windows
+            },
+        }
+    }
+
     #[test]
     fn basic_string() {
         results_in(Spec::from("abc"), vec!["abc"]);
@@ -308,7 +318,7 @@ mod tests {
                 string: Some("d".to_owned()),
                 spectype: SpecType::match_expr(
                     vec![
-                        (Expr::incorrect_os(), Spec::from("g")),
+                        (incorrect_os(), Spec::from("g")),
                         (ExprType::Any.into(), Spec::from("e")),
                     ],
                     Some(Spec::from("f")),
@@ -325,7 +335,7 @@ mod tests {
             Spec {
                 string: Some("d".to_owned()),
                 spectype: SpecType::match_expr(
-                    vec![(Expr::incorrect_os(), Spec::from("g"))],
+                    vec![(incorrect_os(), Spec::from("g"))],
                     Some(Spec::from("f")),
                 ),
             },
