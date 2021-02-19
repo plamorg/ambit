@@ -1,3 +1,5 @@
+use crate::config::parser::SimpleParse;
+
 #[derive(PartialEq, Eq, Debug, Clone)]
 pub struct Entry {
     pub left: Spec,
@@ -97,6 +99,13 @@ impl MatchExpr {
         }
         None
     }
+}
+
+// A comma seperated list of `T`s, with optional trailing comma.
+// (The delimiters are passed to the parse() function.)
+#[derive(PartialEq, Eq, Debug, Clone)]
+pub struct CommaList<T: SimpleParse> {
+    pub list: Vec<T>,
 }
 
 // Something that is either true or false, depending on the system.
