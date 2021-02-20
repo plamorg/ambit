@@ -1,7 +1,9 @@
 use std::{
     error::Error,
     fmt::{self, Display, Formatter},
-    io, process,
+    io,
+    path::PathBuf,
+    process,
 };
 
 use crate::config;
@@ -18,12 +20,12 @@ pub enum AmbitError {
     // File error is encountered on failed file open operation
     // Provides additional path information
     File {
-        path: String,
+        path: PathBuf,
         error: io::Error,
     },
     Symlink {
-        host_file: String,
-        repo_file: String,
+        host_file_path: PathBuf,
+        repo_file_path: PathBuf,
         error: Box<AmbitError>,
     },
     Other(String),
@@ -45,15 +47,16 @@ impl Display for AmbitError {
             AmbitError::Io(ref e) => e.fmt(f),
             AmbitError::Parse(ref e) => e.fmt(f),
             AmbitError::File { path, .. } => {
-                f.write_fmt(format_args!("File error with `{}`", path))
+                f.write_fmt(format_args!("File error with `{}`", path.display()))
             }
             AmbitError::Symlink {
-                repo_file,
-                host_file,
+                repo_file_path,
+                host_file_path,
                 ..
             } => f.write_fmt(format_args!(
                 "Failed to symlink `{}` -> `{}`",
-                host_file, repo_file
+                host_file_path.display(),
+                repo_file_path.display()
             )),
             AmbitError::Other(ref s) => f.write_str(s.as_str()),
         }?;
@@ -102,7 +105,7 @@ mod tests {
     #[test]
     fn display_file() {
         let err = AmbitError::File {
-            path: "path".to_string(),
+            path: PathBuf::from("path"),
             error: io::Error::new(io::ErrorKind::PermissionDenied, "Permission denied"),
         };
         assert_eq!(
@@ -112,6 +115,22 @@ mod tests {
 Caused by:
   Permission denied"#
         )
+    }
+
+    #[test]
+    fn display_symlink() {
+        let err = AmbitError::Symlink {
+            host_file_path: PathBuf::from("host"),
+            repo_file_path: PathBuf::from("repo"),
+            error: Box::new(AmbitError::Other("Error message".to_owned())),
+        };
+        assert_eq!(
+            format!("{}", err),
+            r#"Failed to symlink `host` -> `repo`
+
+Caused by:
+  Error message"#
+        );
     }
 
     #[test]

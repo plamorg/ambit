@@ -90,12 +90,10 @@ pub fn sync(dry_run: bool, quiet: bool) -> AmbitResult<()> {
             AMBIT_PATHS.home.path.join(host_filename),
             AmbitPathKind::File,
         );
-        let host_file_str = host_file.to_str()?;
         let repo_file = AmbitPath::new(
             AMBIT_PATHS.repo.path.join(repo_filename),
             AmbitPathKind::File,
         );
-        let repo_file_str = repo_file.to_str()?;
 
         // already_symlinked holds whether host_file already links to repo_file
         let already_symlinked = fs::read_link(&host_file.path)
@@ -105,8 +103,8 @@ pub fn sync(dry_run: bool, quiet: bool) -> AmbitResult<()> {
         if host_file.exists() && !already_symlinked {
             // Host file already exists but is not symlinked correctly
             return Err(AmbitError::Symlink {
-                host_file: host_file_str.to_owned(),
-                repo_file: repo_file_str.to_owned(),
+                host_file_path: host_file.path,
+                repo_file_path: repo_file.path,
                 error: Box::new(AmbitError::Other(
                     "Host file already exists and is not correctly symlinked".to_owned(),
                 )),
@@ -114,8 +112,8 @@ pub fn sync(dry_run: bool, quiet: bool) -> AmbitResult<()> {
         }
         if !repo_file.exists() {
             return Err(AmbitError::Symlink {
-                host_file: host_file_str.to_owned(),
-                repo_file: repo_file_str.to_owned(),
+                host_file_path: host_file.path,
+                repo_file_path: repo_file.path,
                 error: Box::new(AmbitError::Other(
                     "Repository file does not exist".to_owned(),
                 )),
@@ -127,15 +125,19 @@ pub fn sync(dry_run: bool, quiet: bool) -> AmbitResult<()> {
                 if let Err(e) = symlink(&repo_file.path, &host_file.path) {
                     // Symlink went wrong
                     return Err(AmbitError::Symlink {
-                        host_file: host_file_str.to_owned(),
-                        repo_file: repo_file_str.to_owned(),
+                        host_file_path: host_file.path,
+                        repo_file_path: repo_file.path,
                         error: Box::new(AmbitError::Io(e)),
                     });
                 }
                 successful_symlinks += 1;
             }
             if !quiet {
-                println!("{} -> {}", host_file_str, repo_file.to_str()?);
+                println!(
+                    "{} -> {}",
+                    host_file.path.display(),
+                    repo_file.path.display()
+                );
             }
         }
         total_symlinks += 1;
