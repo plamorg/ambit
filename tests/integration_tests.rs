@@ -178,5 +178,5 @@ fn sync_dry_run_should_not_symlink() {
         .assert()
         .success();
     // Since this is a dry-run, the host_file should not exist.
-    assert!(!temp_dir.path().join("should_not_exist.txt").exists());
+    assert!(!temp_dir.path().join("should-not-exist.txt").exists());
 }
