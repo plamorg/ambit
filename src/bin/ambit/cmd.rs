@@ -121,6 +121,10 @@ pub fn sync(dry_run: bool, quiet: bool) -> AmbitResult<()> {
         }
         if !already_symlinked {
             if !dry_run {
+                if let Some(parent) = host_file.path.parent() {
+                    // Create parent directories of host file if it does not terminate in a root or prefix.
+                    fs::create_dir_all(parent)?;
+                }
                 // Attempt to perform symlink
                 if let Err(e) = symlink(&repo_file.path, &host_file.path) {
                     // Symlink went wrong
