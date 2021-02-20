@@ -180,3 +180,22 @@ fn sync_dry_run_should_not_symlink() {
     // Since this is a dry-run, the host_file should not exist.
     assert!(!temp_dir.path().join("should-not-exist.txt").exists());
 }
+
+#[test]
+fn sync_creates_host_parent_directories() {
+    // Parent directories of the host file should be created if they do not exist.
+    // We want to ensure that the following test does not fail due to "No such file or directory" error.
+    let temp_dir = TempDir::new().unwrap();
+    AmbitTester::from_temp_dir(&temp_dir)
+        .with_default_paths()
+        .with_repo_file("repo.txt")
+        .with_config("repo.txt => a/b/host.txt;")
+        .arg("sync")
+        .assert()
+        .success();
+    // Assert that a/b/host.txt is symlinked to repo.txt
+    assert!(is_symlinked(
+        temp_dir.path().join("a").join("b").join("host.txt"),
+        temp_dir.path().join("repo").join("repo.txt"),
+    ));
+}
