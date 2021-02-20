@@ -1,7 +1,10 @@
 use lazy_static::lazy_static;
-use std::fs::{self, File};
-use std::io::Read;
-use std::path::PathBuf;
+use std::{
+    env,
+    fs::{self, File},
+    io::Read,
+    path::PathBuf,
+};
 
 use ambit::error::{AmbitError, AmbitResult};
 
@@ -18,8 +21,8 @@ pub struct AmbitPath {
 }
 
 impl AmbitPath {
-    pub fn new(path: PathBuf, kind: AmbitPathKind) -> AmbitPath {
-        AmbitPath { path, kind }
+    pub fn new(path: PathBuf, kind: AmbitPathKind) -> Self {
+        Self { path, kind }
     }
 
     pub fn exists(&self) -> bool {
@@ -92,18 +95,34 @@ pub struct AmbitPaths {
 }
 
 impl AmbitPaths {
-    fn new() -> AmbitPaths {
-        let home = dirs::home_dir().expect("Could not get home directory");
-        let configuration = home.join(".config/ambit");
+    fn new() -> Self {
+        // Source home path from environment variable. This is mainly for integration testing purposes.
+        let home_path = AmbitPaths::get_path_from_env("AMBIT_HOME_PATH")
+            .unwrap_or_else(|| dirs::home_dir().expect("Could not get home directory"));
 
-        AmbitPaths {
-            home: AmbitPath::new(home, AmbitPathKind::Directory),
-            config: AmbitPath::new(configuration.join("config.ambit"), AmbitPathKind::File),
-            repo: AmbitPath::new(configuration.join("repo"), AmbitPathKind::Directory),
-            git: AmbitPath::new(
-                configuration.join("repo").join(".git"),
-                AmbitPathKind::Directory,
-            ),
+        let configuration_path = home_path.join(".config/ambit");
+
+        let config_path = AmbitPaths::get_path_from_env("AMBIT_CONFIG_PATH")
+            .unwrap_or_else(|| configuration_path.join("config.ambit"));
+
+        let repo_path = AmbitPaths::get_path_from_env("AMBIT_REPO_PATH")
+            .unwrap_or_else(|| configuration_path.join("repo"));
+
+        let git_path = repo_path.join(".git");
+
+        Self {
+            home: AmbitPath::new(home_path, AmbitPathKind::Directory),
+            config: AmbitPath::new(config_path, AmbitPathKind::File),
+            repo: AmbitPath::new(repo_path, AmbitPathKind::Directory),
+            git: AmbitPath::new(git_path, AmbitPathKind::Directory),
+        }
+    }
+
+    // Attempt to fetch path from env if set
+    fn get_path_from_env(key: &str) -> Option<PathBuf> {
+        match env::var_os(key) {
+            Some(path) => Some(PathBuf::from(path)),
+            None => None,
         }
     }
 }
