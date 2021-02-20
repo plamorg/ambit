@@ -25,8 +25,16 @@ fn expect<I: Iterator<Item = Token>>(
         }
     }
 }
+
+/* Returns if the next element from the iterator `iter` has toktype `ty`,
+ * without advancing the iterator.
+ */
+fn next_is<I: Iterator<Item = Token>>(iter: &mut Peekable<I>, ty: TokType) -> bool {
+    iter.peek().map(|x| x.toktype == ty).unwrap_or(false)
+}
+
 fn eat<I: Iterator<Item = Token>>(iter: &mut Peekable<I>, ty: TokType) -> bool {
-    if iter.peek().map(|x| x.toktype == ty).unwrap_or(false) {
+    if next_is(iter, ty) {
         iter.next();
         true
     } else {
@@ -165,13 +173,9 @@ impl SimpleParse for VariantExpr {
     fn parse<I: Iterator<Item = Token>>(iter: &mut Peekable<I>) -> ParseResult<Self> {
         expect(iter, &[TokType::LBracket])?;
         // Better error message.
-        if iter
-            .peek()
-            .map(|x| x.toktype == TokType::RBracket)
-            .unwrap_or(false)
-        {
+        if next_is(iter, TokType::RBracket) {
             return Err(ParseError::from(ParseErrorType::Custom(
-                "Variant expression have at least one option",
+                "Variant expression must have at least one option",
             )));
         }
         Ok(VariantExpr {
@@ -183,7 +187,10 @@ impl SimpleParse for VariantExpr {
 // match-expr -> { comma-list<(expr ":" spec)> }
 impl SimpleParse for MatchExpr {
     fn parse<I: Iterator<Item = Token>>(iter: &mut Peekable<I>) -> ParseResult<Self> {
+        expect(iter, &[TokType::LBrace])?;
         // Allow `expr ":" spec` to be parsed into a tuple `(expr, spec)`.
+        // (This would be confusing if placed in outer scope,
+        // since it's unnecessary, so it's placed here.)
         impl SimpleParse for (Expr, Spec) {
             fn parse<I: Iterator<Item = Token>>(iter: &mut Peekable<I>) -> ParseResult<Self> {
                 let expr = Expr::parse(iter)?;
@@ -192,7 +199,6 @@ impl SimpleParse for MatchExpr {
                 Ok((expr, spec))
             }
         }
-        expect(iter, &[TokType::LBrace])?;
         Ok(MatchExpr {
             cases: CommaList::parse(iter, TokType::RBrace)?.list,
         })
@@ -200,18 +206,18 @@ impl SimpleParse for MatchExpr {
 }
 
 // comma-list<T> -> (T ",")* T?
+// Note that CommaList does not implement SimpleParse.
 impl<T: SimpleParse> CommaList<T> {
     pub fn parse<I: Iterator<Item = Token>>(
         iter: &mut Peekable<I>,
+        // What token the comma-list should end at, such as RBrace or RBracket.
+        // (Required because computers aren't good enough at parsing :/)
         end: TokType,
     ) -> ParseResult<Self> {
         let mut list = Vec::new();
-        loop {
-            // Allow trailing comma
-            if eat(iter, end) {
-                break;
-            }
+        while !eat(iter, end) {
             list.push(T::parse(iter)?);
+            // Allow list without trailing comma
             if eat(iter, end) {
                 break;
             }
@@ -460,6 +466,8 @@ mod tests {
             }],
         )
     }
+
+    // Trailing commas are valid syntax and must be supported.
 
     #[test]
     fn variant_trailing_comma() {
