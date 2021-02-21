@@ -79,10 +79,7 @@ impl Default for AmbitTester {
 // Returns if a is symlinked to b (a -> b).
 fn is_symlinked(a: PathBuf, b: PathBuf) -> bool {
     fs::read_link(a)
-        .map(|link_path| {
-            println!("{}", link_path.display());
-            link_path == b
-        })
+        .map(|link_path| link_path == b)
         .unwrap_or(false)
 }
 
