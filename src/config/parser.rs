@@ -253,6 +253,8 @@ impl SimpleParse for Expr {
             }) => match s.as_str() {
                 "os" => expr_type = Expr::Os,
                 "host" => expr_type = Expr::Host,
+                "!os" => expr_type = Expr::NotOs,
+                "!host" => expr_type = Expr::NotHost,
                 "default" => {
                     // "default" takes no strings to check (since it's always true).
                     iter.next();

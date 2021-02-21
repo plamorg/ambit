@@ -284,10 +284,8 @@ mod tests {
         assert_eq!(yielded, expected);
     }
 
-    fn incorrect_os() -> Expr {
-        Expr::Os(vec![
-            if cfg!(windows) { "linux" } else { "windows" }.to_owned()
-        ])
+    fn incorrect_os() -> String {
+        if cfg!(windows) { "linux" } else { "windows" }.to_owned()
     }
 
     #[test]
@@ -303,7 +301,7 @@ mod tests {
                 spectype: SpecType::variant_expr(vec![Spec::from("b"), Spec::from("c")], None),
             },
             vec!["ab", "ac"],
-        )
+        );
     }
 
     #[test]
@@ -314,7 +312,7 @@ mod tests {
                 string: Some("d".to_owned()),
                 spectype: SpecType::match_expr(
                     vec![
-                        (incorrect_os(), Spec::from("g")),
+                        (Expr::Os(vec![incorrect_os()]), Spec::from("g")),
                         (Expr::Any, Spec::from("e")),
                     ],
                     Some(Spec::from("f")),
@@ -331,14 +329,14 @@ mod tests {
             Spec {
                 string: Some("d".to_owned()),
                 spectype: SpecType::match_expr(
-                    vec![(incorrect_os(), Spec::from("g"))],
+                    vec![(Expr::Os(vec![incorrect_os()]), Spec::from("g"))],
                     Some(Spec::from("f")),
                 ),
             },
             // Since the MatchExpr can't resolve to anything,
             // there is nothing here.
             // (At least, if the test _succeeds_.)
-            vec![],
+            Vec::new(),
         )
     }
 
@@ -357,6 +355,39 @@ mod tests {
             },
             // It will always resolve,
             // because it has the same hostname.
+            vec!["a"],
+        )
+    }
+
+    #[test]
+    fn not_hostname_match() {
+        results_in(
+            Spec {
+                string: None,
+                spectype: SpecType::match_expr(
+                    vec![(
+                        Expr::NotHost(vec![hostname::get().unwrap().into_string().unwrap()]),
+                        Spec::from("a"),
+                    )],
+                    None,
+                ),
+            },
+            // Since the value of NotHost is the fetched hostname, no spec should be resolved.
+            Vec::new(),
+        )
+    }
+
+    #[test]
+    fn not_os_match() {
+        results_in(
+            Spec {
+                string: None,
+                spectype: SpecType::match_expr(
+                    vec![(Expr::NotOs(vec![incorrect_os()]), Spec::from("a"))],
+                    None,
+                ),
+            },
+            // The os given to NotOs is an incorrect_os which means it should resolve.
             vec!["a"],
         )
     }

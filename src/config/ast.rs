@@ -105,6 +105,8 @@ pub struct CommaList<T: SimpleParse> {
 pub enum Expr {
     Os(Vec<String>),
     Host(Vec<String>),
+    NotOs(Vec<String>),
+    NotHost(Vec<String>),
     // The "Default" exprtype,
     // so-named due to conflicts with the Default iterator.
     Any,
@@ -114,6 +116,8 @@ impl Expr {
         match self {
             Expr::Os(oss) => oss.iter().any(|os| std::env::consts::OS == os),
             Expr::Host(hosts) => hosts.iter().any(|host| &*HOSTNAME == host),
+            Expr::NotOs(oss) => oss.iter().any(|os| std::env::consts::OS != os),
+            Expr::NotHost(hosts) => hosts.iter().any(|host| &*HOSTNAME != host),
             Expr::Any => true,
         }
     }
