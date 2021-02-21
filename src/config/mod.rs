@@ -15,6 +15,7 @@ use std::iter::Peekable;
 pub enum ParseErrorType {
     Expected(&'static [lexer::TokType]),
     Custom(&'static str),
+    Lex(&'static str),
 }
 
 #[derive(PartialEq, Eq, Debug, Clone)]

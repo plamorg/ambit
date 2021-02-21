@@ -19,26 +19,43 @@ fn expect<I: Iterator<Item = Token>>(
         .find(|ty| iter.peek().map(|x| x.toktype == **ty).unwrap_or(false));
     match res {
         None => Err(ParseError::from(ParseErrorType::Expected(choices))),
-        Some(tok) => {
-            iter.next();
-            Ok(*tok)
-        }
+        Some(_) => Ok(iter.next().unwrap().toktype),
     }
 }
 
 /* Returns if the next element from the iterator `iter` has toktype `ty`,
  * without advancing the iterator.
  */
-fn next_is<I: Iterator<Item = Token>>(iter: &mut Peekable<I>, ty: TokType) -> bool {
-    iter.peek().map(|x| x.toktype == ty).unwrap_or(false)
+fn next_is<I: Iterator<Item = Token>>(iter: &mut Peekable<I>, ty: &TokType) -> bool {
+    iter.peek().map(|x| x.toktype == *ty).unwrap_or(false)
 }
 
-fn eat<I: Iterator<Item = Token>>(iter: &mut Peekable<I>, ty: TokType) -> bool {
+fn eat<I: Iterator<Item = Token>>(iter: &mut Peekable<I>, ty: &TokType) -> bool {
     if next_is(iter, ty) {
         iter.next();
         true
     } else {
         false
+    }
+}
+
+// Helpful SimpleParse type.
+impl SimpleParse for String {
+    fn parse<I: Iterator<Item = Token>>(iter: &mut Peekable<I>) -> ParseResult<Self> {
+        if let Some(Token {
+            toktype: TokType::Str(_),
+            ..
+        }) = iter.peek()
+        {
+            if let Some(Token {
+                toktype: TokType::Str(s),
+                ..
+            }) = iter.next()
+            {
+                return Ok(s);
+            }
+        }
+        Err(ParseError::from(ParseErrorType::Expected(EXPECTED_STR)))
     }
 }
 
@@ -75,7 +92,7 @@ impl SimpleParse for Entry {
     fn parse<I: Iterator<Item = Token>>(iter: &mut Peekable<I>) -> ParseResult<Self> {
         let left = Spec::parse(iter)?;
         let mut right = None;
-        if eat(iter, TokType::MapsTo) {
+        if eat(iter, &TokType::MapsTo) {
             let right_val = Spec::parse(iter)?;
             let left_nr = left.nr_of_options().ok_or(ParseError {
                 tok: None,
@@ -104,17 +121,12 @@ impl SimpleParse for Entry {
 impl SimpleParse for Spec {
     fn parse<I: Iterator<Item = Token>>(iter: &mut Peekable<I>) -> ParseResult<Self> {
         let mut string = None;
-        if iter
-            .peek()
-            .map(|x| x.toktype == TokType::Str)
-            .unwrap_or(false)
+        if let Some(Token {
+            toktype: TokType::Str(_),
+            ..
+        }) = iter.peek()
         {
-            string = Some(
-                iter.next()
-                    .unwrap()
-                    .string
-                    .expect("Internal error: string expected!"),
-            );
+            string = Some(iter.next().unwrap().toktype.unwrap_str());
         }
         fn try_parse_spec<I: Iterator<Item = Token>>(
             iter: &mut Peekable<I>,
@@ -122,9 +134,10 @@ impl SimpleParse for Spec {
             // Check if a new spec could start here.
             // Note that this should be updated if the spec specification changes.
             fn is_starting_token(next: &Token) -> bool {
-                [TokType::Str, TokType::LBrace, TokType::LBracket]
-                    .iter()
-                    .any(|x| next.toktype == *x)
+                matches!(
+                    next.toktype,
+                    TokType::Str(_) | TokType::LBrace | TokType::LBracket
+                )
             }
             if iter.peek().map(is_starting_token).unwrap_or(false) {
                 Ok(Some(Box::new(Spec::parse(iter)?)))
@@ -158,7 +171,7 @@ impl SimpleParse for Spec {
             },
         }
         if string.is_none() {
-            Err(ParseError::from(ParseErrorType::Expected(&[TokType::Str])))
+            Err(ParseError::from(ParseErrorType::Expected(EXPECTED_STR)))
         } else {
             Ok(Spec {
                 string,
@@ -173,13 +186,13 @@ impl SimpleParse for VariantExpr {
     fn parse<I: Iterator<Item = Token>>(iter: &mut Peekable<I>) -> ParseResult<Self> {
         expect(iter, &[TokType::LBracket])?;
         // Better error message.
-        if next_is(iter, TokType::RBracket) {
+        if next_is(iter, &TokType::RBracket) {
             return Err(ParseError::from(ParseErrorType::Custom(
                 "Variant expression must have at least one option",
             )));
         }
         Ok(VariantExpr {
-            specs: CommaList::parse(iter, TokType::RBracket)?.list,
+            specs: CommaList::parse(iter, &TokType::RBracket)?.list,
         })
     }
 }
@@ -200,7 +213,7 @@ impl SimpleParse for MatchExpr {
             }
         }
         Ok(MatchExpr {
-            cases: CommaList::parse(iter, TokType::RBrace)?.list,
+            cases: CommaList::parse(iter, &TokType::RBrace)?.list,
         })
     }
 }
@@ -212,7 +225,7 @@ impl<T: SimpleParse> CommaList<T> {
         iter: &mut Peekable<I>,
         // What token the comma-list should end at, such as RBrace or RBracket.
         // (Required because computers aren't good enough at parsing :/)
-        end: TokType,
+        end: &TokType,
     ) -> ParseResult<Self> {
         let mut list = Vec::new();
         while !eat(iter, end) {
@@ -227,34 +240,31 @@ impl<T: SimpleParse> CommaList<T> {
     }
 }
 
-// expr -> "windows" | "linux" | "macos" | "unix" | "bsd"
-// (for now)
+// expr -> ( "os" | "host" ) "(" comma-list<str> ")"
+//       | "default"
 impl SimpleParse for Expr {
     fn parse<I: Iterator<Item = Token>>(iter: &mut Peekable<I>) -> ParseResult<Self> {
-        macro_rules! exprtype {
-            ($i:ident) => {{
-                iter.next();
-                Ok(Expr {
-                    exprtype: ExprType::$i,
-                })
-            }};
-        }
-        if let Some(tok) = iter.peek() {
-            if tok.toktype == TokType::Str {
-                if let Some(s) = tok.string.as_ref() {
-                    match s.as_str() {
-                        "windows" => return exprtype!(Windows),
-                        "macos" => return exprtype!(Macos),
-                        "linux" => return exprtype!(Linux),
-                        "unix" => return exprtype!(Unix),
-                        "bsd" => return exprtype!(Bsd),
-                        "default" => return exprtype!(Any),
-                        _ => {}
-                    }
+        let err = ParseError::from(ParseErrorType::Expected(EXPECTED_STR));
+        let expr_type: fn(Vec<String>) -> Expr;
+        match iter.peek() {
+            Some(Token {
+                toktype: TokType::Str(s),
+                ..
+            }) => match s.as_str() {
+                "os" => expr_type = Expr::Os,
+                "host" => expr_type = Expr::Host,
+                "default" => {
+                    // "default" takes no strings to check (since it's always true).
+                    iter.next();
+                    return Ok(Expr::Any);
                 }
-            }
+                _ => return Err(err),
+            },
+            _ => return Err(err),
         }
-        Err(ParseError::from(ParseErrorType::Expected(&[TokType::Str])))
+        iter.next();
+        expect(iter, &[TokType::LParen])?;
+        Ok(expr_type(CommaList::parse(iter, &TokType::RParen)?.list))
     }
 }
 
@@ -269,14 +279,14 @@ mod tests {
             {
                 trait StrToToken where Self: ToString {
                     fn repr_as_token(&self) -> Token {
-                        Token { string: Some(self.to_string()), line: 0, toktype: TokType::Str }
+                        Token { line: 0, toktype: TokType::Str(self.to_string()) }
                     }
                 }
                 // If the type is a `&str`, make the outputted Token be a TokType::Str.
                 impl StrToToken for &str {}
                 trait OtherToToken where Self: Into<TokType> + Clone {
                     fn repr_as_token(&self) -> Token {
-                        Token { string: None, line: 0, toktype: self.clone().into() }
+                        Token { line: 0, toktype: self.clone().into() }
                     }
                 }
                 // If the type is a `TokType`, make the outputted Token be that toktype.
@@ -334,17 +344,20 @@ mod tests {
     }
 
     #[test]
-    fn comp_expr_basic() {
+    fn match_expr_basic() {
         success(
             &toklist![
                 TokType::LBrace,
-                "windows",
-                TokType::Colon,
-                "a",
-                TokType::Comma,
                 "default",
                 TokType::Colon,
                 "b",
+                TokType::Comma,
+                "os",
+                TokType::LParen,
+                "windows",
+                TokType::RParen,
+                TokType::Colon,
+                "a",
                 TokType::RBrace,
                 "c",
                 TokType::Semicolon
@@ -354,8 +367,8 @@ mod tests {
                     string: None,
                     spectype: SpecType::match_expr(
                         vec![
-                            (ExprType::Windows.into(), Spec::from("a")),
-                            (ExprType::Any.into(), Spec::from("b")),
+                            (Expr::Any, Spec::from("b")),
+                            (Expr::Os(vec!["windows".to_owned()]), Spec::from("a")),
                         ],
                         Some(Spec::from("c")),
                     ),
@@ -441,11 +454,17 @@ mod tests {
         success(
             &toklist![
                 TokType::LBrace,
-                "linux",
+                "host",
+                TokType::LParen,
+                "hexagon",
+                TokType::RParen,
                 TokType::Colon,
                 "a",
                 TokType::Comma,
+                "os",
+                TokType::LParen,
                 "macos",
+                TokType::RParen,
                 TokType::Colon,
                 "b",
                 TokType::RBrace,
@@ -456,8 +475,8 @@ mod tests {
                     string: None,
                     spectype: SpecType::match_expr(
                         vec![
-                            (ExprType::Linux.into(), Spec::from("a")),
-                            (ExprType::Macos.into(), Spec::from("b")),
+                            (Expr::Host(vec!["hexagon".to_owned()]), Spec::from("a")),
+                            (Expr::Os(vec!["macos".to_owned()]), Spec::from("b")),
                         ],
                         None,
                     ),
@@ -494,7 +513,13 @@ mod tests {
         success(
             &toklist![
                 TokType::LBrace,
+                "os",
+                TokType::LParen,
                 "linux",
+                TokType::Comma,
+                "windows",
+                TokType::Comma, // also checks trailing comma on `os(linux, windows, )`
+                TokType::RParen,
                 TokType::Colon,
                 "a",
                 TokType::Comma,
@@ -505,7 +530,10 @@ mod tests {
                 left: Spec {
                     string: None,
                     spectype: SpecType::match_expr(
-                        vec![(ExprType::Linux.into(), Spec::from("a"))],
+                        vec![(
+                            Expr::Os(vec!["linux".to_owned(), "windows".to_owned()]),
+                            Spec::from("a"),
+                        )],
                         None,
                     ),
                 },

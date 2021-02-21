@@ -1,5 +1,7 @@
 use crate::config::parser::SimpleParse;
 
+use lazy_static::lazy_static;
+
 #[derive(PartialEq, Eq, Debug, Clone)]
 pub struct Entry {
     pub left: Spec,
@@ -81,18 +83,8 @@ pub struct MatchExpr {
 }
 impl MatchExpr {
     pub fn resolve(&self) -> Option<&Spec> {
-        let os = match std::env::consts::OS {
-            "linux" => Some(ExprType::Linux),
-            "windows" => Some(ExprType::Windows),
-            "macos" => Some(ExprType::Macos),
-            "freebsd" | "netbsd" | "openbsd" => Some(ExprType::Bsd),
-            _ => None,
-        };
         for (expr, spec) in &self.cases {
-            if (cfg!(unix) && expr.exprtype == ExprType::Unix) // is unix
-                || os.as_ref().map(|x| *x == expr.exprtype).unwrap_or(false) // OS matches the expr
-                || expr.exprtype == ExprType::Any
-            {
+            if expr.is_true() {
                 // it matches
                 return Some(&spec);
             }
@@ -110,22 +102,27 @@ pub struct CommaList<T: SimpleParse> {
 
 // Something that is either true or false, depending on the system.
 #[derive(PartialEq, Eq, Debug, Clone)]
-pub struct Expr {
-    pub exprtype: ExprType,
-}
-#[derive(PartialEq, Eq, Debug, Clone)]
-pub enum ExprType {
-    Windows,
-    Linux,
-    Macos,
-    Unix,
-    Bsd,
+pub enum Expr {
+    Os(Vec<String>),
+    Host(Vec<String>),
     // The "Default" exprtype,
     // so-named due to conflicts with the Default iterator.
     Any,
 }
-impl From<ExprType> for Expr {
-    fn from(exprtype: ExprType) -> Expr {
-        Expr { exprtype }
+impl Expr {
+    pub fn is_true(&self) -> bool {
+        match self {
+            Expr::Os(oss) => oss.iter().any(|os| std::env::consts::OS == os),
+            Expr::Host(hosts) => hosts.iter().any(|host| &*HOSTNAME == host),
+            Expr::Any => true,
+        }
     }
+}
+
+// Cache hostname to avoid having to call hostname::get() multiple times.
+lazy_static! {
+    static ref HOSTNAME: String = hostname::get()
+        .expect("could not get hostname")
+        .into_string()
+        .expect("hostname must be a valid encoding");
 }

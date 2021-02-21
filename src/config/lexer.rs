@@ -1,39 +1,54 @@
 use std::iter::Peekable;
 
-#[derive(PartialEq, Eq, Debug, Clone, Copy)]
+#[derive(PartialEq, Eq, Debug, Clone)]
 pub enum TokType {
-    Str,
-    // "Brace" refers to curly braces: { and }.
-    RBrace,
+    // An unquoted string, e.g. `.config/`.
+    Str(String),
+    // "Paren" refers to parentheses: `(` and `)`.
+    LParen,
+    RParen,
+    // "Brace" refers to curly braces: `{` and `}`.
     LBrace,
-    // "Bracket" refers to square brackets: [ and ].
-    RBracket,
+    RBrace,
+    // "Bracket" refers to square brackets: `[` and `]`.
     LBracket,
+    RBracket,
+    // The mapping operator, `=>`.
     MapsTo,
     Comma,
     Colon,
     Semicolon,
 }
+impl TokType {
+    pub fn unwrap_str(self) -> String {
+        match self {
+            TokType::Str(s) => s,
+            _ => panic!("Failed to unwrap str"),
+        }
+    }
+}
+
+pub const EXPECTED_STR: &[TokType; 1] = &[TokType::Str(String::new())];
+
+impl<'a> From<&'a str> for TokType {
+    fn from(s: &'a str) -> TokType {
+        TokType::Str(s.to_owned())
+    }
+}
 
 #[derive(PartialEq, Eq, Debug, Clone)]
 pub struct Token {
     pub toktype: TokType,
-    pub string: Option<String>,
     pub line: usize,
 }
 
 impl Token {
-    pub fn new(toktype: TokType, line: usize) -> Token {
-        Token {
-            toktype,
-            string: None,
-            line,
-        }
+    pub fn new(toktype: TokType, line: usize) -> Self {
+        Self { toktype, line }
     }
-    pub fn string(s: String, line: usize) -> Token {
-        Token {
-            toktype: TokType::Str,
-            string: Some(s),
+    pub fn string(s: String, line: usize) -> Self {
+        Self {
+            toktype: TokType::Str(s),
             line,
         }
     }
@@ -56,7 +71,7 @@ impl<I: Iterator<Item = char>> Iterator for Lexer<I> {
         fn proc_str<I: Iterator<Item = char>>(iter: &mut Peekable<I>, start: char) -> String {
             fn is_ending_char(c: char) -> bool {
                 c.is_ascii_whitespace()
-                    || ['{', '}', '[', ']', ',', ';', ':', '=']
+                    || ['(', ')', '{', '}', '[', ']', ',', ';', ':', '=']
                         .iter()
                         .any(|e| *e == c)
             }
@@ -85,6 +100,8 @@ impl<I: Iterator<Item = char>> Iterator for Lexer<I> {
                 None => return None,
                 Some(chr) => match chr {
                     '\n' => self.line += 1,
+                    '(' => return Some(new_tok!(LParen)),
+                    ')' => return Some(new_tok!(RParen)),
                     '{' => return Some(new_tok!(LBrace)),
                     '}' => return Some(new_tok!(RBrace)),
                     '[' => return Some(new_tok!(LBracket)),
@@ -143,7 +160,7 @@ mod tests {
             "\
 ~/.config/nvim/init.vim => config.nvim;
 ~/{
-    windows: _config,
+    os(linux, macos): _config,
     default: .config
 }/rofi.rasi;
 /etc/fonts/local.conf => local.conf;
@@ -155,7 +172,12 @@ mod tests {
                 tok!(Semicolon, 1),
                 tok!("~/", 2),
                 tok!(LBrace, 2),
-                tok!("windows", 3),
+                tok!("os", 3),
+                tok!(LParen, 3),
+                tok!("linux", 3),
+                tok!(Comma, 3),
+                tok!("macos", 3),
+                tok!(RParen, 3),
                 tok!(Colon, 3),
                 tok!("_config", 3),
                 tok!(Comma, 3),
@@ -197,8 +219,10 @@ mod tests {
     #[test]
     fn all_symbols() {
         check_lexer_output(
-            "{ }\n [ ]\n ; \n =>\t\n = >\n ,\n",
+            "(  \t){ }\n [ ]\n ; \n =>\t\n = >\n ,\n",
             vec![
+                tok!(LParen, 1),
+                tok!(RParen, 1),
                 tok!(LBrace, 1),
                 tok!(RBrace, 1),
                 tok!(LBracket, 2),
