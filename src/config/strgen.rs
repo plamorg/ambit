@@ -285,13 +285,9 @@ mod tests {
     }
 
     fn incorrect_os() -> Expr {
-        Expr {
-            exprtype: if cfg!(windows) {
-                ExprType::Linux
-            } else {
-                ExprType::Windows
-            },
-        }
+        Expr::Os(vec![
+            if cfg!(windows) { "linux" } else { "windows" }.to_owned()
+        ])
     }
 
     #[test]
@@ -319,7 +315,7 @@ mod tests {
                 spectype: SpecType::match_expr(
                     vec![
                         (incorrect_os(), Spec::from("g")),
-                        (ExprType::Any.into(), Spec::from("e")),
+                        (Expr::Any, Spec::from("e")),
                     ],
                     Some(Spec::from("f")),
                 ),
@@ -343,6 +339,25 @@ mod tests {
             // there is nothing here.
             // (At least, if the test _succeeds_.)
             vec![],
+        )
+    }
+
+    #[test]
+    fn hostname_match() {
+        results_in(
+            Spec {
+                string: None,
+                spectype: SpecType::match_expr(
+                    vec![(
+                        Expr::Host(vec![hostname::get().unwrap().into_string().unwrap()]),
+                        Spec::from("a"),
+                    )],
+                    None,
+                ),
+            },
+            // It will always resolve,
+            // because it has the same hostname.
+            vec!["a"],
         )
     }
 
