@@ -10,6 +10,7 @@ use tempfile::TempDir;
 pub struct AmbitTester {
     config_path: PathBuf,
     repo_path: PathBuf,
+    host_path: PathBuf,
     executable: Command,
 }
 // Builder pattern implementation
@@ -18,6 +19,7 @@ impl AmbitTester {
     fn from_temp_dir(temp_dir: &TempDir) -> Self {
         let config_path = temp_dir.path().join("config.ambit");
         let repo_path = temp_dir.path().join("repo");
+        let host_path = temp_dir.path().into();
         let mut executable = Command::cargo_bin("ambit").unwrap();
         // Set environment variables.
         // AMBIT_HOME_PATH is set as temp_dir. This is important as it will be the prefix path of potential synced files.
@@ -27,6 +29,7 @@ impl AmbitTester {
         Self {
             config_path,
             repo_path,
+            host_path,
             executable,
         }
     }
@@ -43,9 +46,16 @@ impl AmbitTester {
         self
     }
 
+    // Creates a custom file in home_path directory. Mimic host_file.
+    fn with_host_file(self, name: &str) -> Self {
+        File::create(self.host_path.join(name)).unwrap();
+        self
+    }
+
     // Creates configuration file and repository directory with .git.
     fn with_default_paths(self) -> Self {
         fs::create_dir_all(&self.repo_path.join(".git")).unwrap();
+        fs::create_dir_all(&self.host_path).unwrap();
         File::create(&self.config_path).unwrap();
         self
     }
@@ -158,6 +168,25 @@ fn sync_normal() {
         .assert()
         .success();
     // Assert that host.txt is symlinked to repo.txt
+    assert!(is_symlinked(
+        temp_dir.path().join("host.txt"),
+        temp_dir.path().join("repo").join("repo.txt")
+    ));
+}
+
+#[test]
+fn sync_move_normal() {
+    let temp_dir = TempDir::new().unwrap();
+    AmbitTester::from_temp_dir(&temp_dir)
+        .with_default_paths()
+        .with_config("repo.txt => host.txt;")
+        .with_host_file("host.txt")
+        .args(vec!["sync", "-m"])
+        .assert()
+        .success();
+    // The new `repo.txt` should now exist
+    assert!(temp_dir.path().join("repo").join("repo.txt").exists());
+    // The symlink should still succeed
     assert!(is_symlinked(
         temp_dir.path().join("host.txt"),
         temp_dir.path().join("repo").join("repo.txt")

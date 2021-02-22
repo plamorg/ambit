@@ -76,7 +76,7 @@ pub fn check() -> AmbitResult<()> {
 }
 
 // Sync files in dotfile repository to system through symbolic links
-pub fn sync(dry_run: bool, quiet: bool) -> AmbitResult<()> {
+pub fn sync(dry_run: bool, quiet: bool, move_files: bool) -> AmbitResult<()> {
     // Only symlink if repo and git directories exist
     if !(AMBIT_PATHS.repo.exists() && AMBIT_PATHS.git.exists()) {
         return Err(AmbitError::Other(
@@ -100,7 +100,11 @@ pub fn sync(dry_run: bool, quiet: bool) -> AmbitResult<()> {
             .map(|link_path| link_path == repo_file.path)
             .unwrap_or(false);
 
-        if host_file.exists() && !already_symlinked {
+        // cache for later
+        let host_file_exists = host_file.exists();
+        let repo_file_exists = repo_file.exists();
+
+        if host_file_exists && !already_symlinked && !move_files {
             // Host file already exists but is not symlinked correctly
             return Err(AmbitError::Symlink {
                 host_file_path: host_file.path,
@@ -110,7 +114,7 @@ pub fn sync(dry_run: bool, quiet: bool) -> AmbitResult<()> {
                 )),
             });
         }
-        if !repo_file.exists() {
+        if !repo_file_exists && !move_files {
             return Err(AmbitError::Symlink {
                 host_file_path: host_file.path,
                 repo_file_path: repo_file.path,
@@ -120,10 +124,22 @@ pub fn sync(dry_run: bool, quiet: bool) -> AmbitResult<()> {
             });
         }
         if !already_symlinked {
+            let mut moved = false;
+            let mut linked = false;
             if !dry_run {
-                if let Some(parent) = host_file.path.parent() {
-                    // Create parent directories of host file if it does not terminate in a root or prefix.
-                    fs::create_dir_all(parent)?;
+                fn ensure_parent_dirs_exist(file: &AmbitPath) -> AmbitResult<()> {
+                    if let Some(parent) = file.path.parent() {
+                        fs::create_dir_all(parent)?;
+                    }
+                    Ok(())
+                }
+                if host_file_exists && !repo_file_exists && move_files {
+                    // Automatically move the file into the repo
+                    ensure_parent_dirs_exist(&repo_file)?;
+                    fs::rename(&host_file.path, &repo_file.path)?;
+                    moved = true;
+                } else {
+                    ensure_parent_dirs_exist(&host_file)?;
                 }
                 // Attempt to perform symlink
                 if let Err(e) = symlink(&repo_file.path, &host_file.path) {
@@ -134,11 +150,20 @@ pub fn sync(dry_run: bool, quiet: bool) -> AmbitResult<()> {
                         error: Box::new(AmbitError::Io(e)),
                     });
                 }
+                linked = true;
                 successful_symlinks += 1;
             }
             if !quiet {
+                let info = match moved {
+                    true => "moved",
+                    false => match linked {
+                        true => "linked",
+                        false => "inspected",
+                    },
+                };
                 println!(
-                    "{} -> {}",
+                    "{} {} -> {}",
+                    info,
                     host_file.path.display(),
                     repo_file.path.display()
                 );
