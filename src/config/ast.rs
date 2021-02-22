@@ -53,6 +53,14 @@ impl From<&str> for Spec {
         }
     }
 }
+impl From<SpecType> for Spec {
+    fn from(t: SpecType) -> Self {
+        Spec {
+            string: None,
+            spectype: t,
+        }
+    }
+}
 impl SpecType {
     pub fn variant_expr(specs: Vec<Spec>, rest: Option<Spec>) -> Self {
         SpecType::Variant(Box::new(VariantExpr { specs }), rest.map(Box::new))
@@ -116,8 +124,8 @@ impl Expr {
         match self {
             Expr::Os(oss) => oss.iter().any(|os| std::env::consts::OS == os),
             Expr::Host(hosts) => hosts.iter().any(|host| &*HOSTNAME == host),
-            Expr::NotOs(oss) => oss.iter().any(|os| std::env::consts::OS != os),
-            Expr::NotHost(hosts) => hosts.iter().any(|host| &*HOSTNAME != host),
+            Expr::NotOs(oss) => oss.iter().all(|os| std::env::consts::OS != os),
+            Expr::NotHost(hosts) => hosts.iter().all(|host| &*HOSTNAME != host),
             Expr::Any => true,
         }
     }
