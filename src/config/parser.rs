@@ -253,6 +253,8 @@ impl SimpleParse for Expr {
             }) => match s.as_str() {
                 "os" => expr_type = Expr::Os,
                 "host" => expr_type = Expr::Host,
+                "!os" => expr_type = Expr::NotOs,
+                "!host" => expr_type = Expr::NotHost,
                 "default" => {
                     // "default" takes no strings to check (since it's always true).
                     iter.next();
@@ -334,10 +336,10 @@ mod tests {
                 TokType::Semicolon
             ],
             &[Entry {
-                left: Spec {
-                    string: None,
-                    spectype: SpecType::variant_expr(vec![Spec::from("a"), Spec::from("b")], None),
-                },
+                left: Spec::from(SpecType::variant_expr(
+                    vec![Spec::from("a"), Spec::from("b")],
+                    None,
+                )),
                 right: None,
             }],
         );
@@ -363,16 +365,13 @@ mod tests {
                 TokType::Semicolon
             ],
             &[Entry {
-                left: Spec {
-                    string: None,
-                    spectype: SpecType::match_expr(
-                        vec![
-                            (Expr::Any, Spec::from("b")),
-                            (Expr::Os(vec!["windows".to_owned()]), Spec::from("a")),
-                        ],
-                        Some(Spec::from("c")),
-                    ),
-                },
+                left: Spec::from(SpecType::match_expr(
+                    vec![
+                        (Expr::Any, Spec::from("b")),
+                        (Expr::Os(vec!["windows".to_owned()]), Spec::from("a")),
+                    ],
+                    Some(Spec::from("c")),
+                )),
                 right: None,
             }],
         );
@@ -404,13 +403,10 @@ mod tests {
                         None,
                     ),
                 },
-                right: Some(Spec {
-                    string: None,
-                    spectype: SpecType::variant_expr(
-                        vec![Spec::from("gvim"), Spec::from("ed")],
-                        None,
-                    ),
-                }),
+                right: Some(Spec::from(SpecType::variant_expr(
+                    vec![Spec::from("gvim"), Spec::from("ed")],
+                    None,
+                ))),
             }],
         );
     }
@@ -471,16 +467,13 @@ mod tests {
                 TokType::Semicolon
             ],
             &[Entry {
-                left: Spec {
-                    string: None,
-                    spectype: SpecType::match_expr(
-                        vec![
-                            (Expr::Host(vec!["hexagon".to_owned()]), Spec::from("a")),
-                            (Expr::Os(vec!["macos".to_owned()]), Spec::from("b")),
-                        ],
-                        None,
-                    ),
-                },
+                left: Spec::from(SpecType::match_expr(
+                    vec![
+                        (Expr::Host(vec!["hexagon".to_owned()]), Spec::from("a")),
+                        (Expr::Os(vec!["macos".to_owned()]), Spec::from("b")),
+                    ],
+                    None,
+                )),
                 right: None,
             }],
         )
@@ -499,10 +492,7 @@ mod tests {
                 TokType::Semicolon
             ],
             &[Entry {
-                left: Spec {
-                    string: None,
-                    spectype: SpecType::variant_expr(vec![Spec::from("a")], None),
-                },
+                left: Spec::from(SpecType::variant_expr(vec![Spec::from("a")], None)),
                 right: None,
             }],
         )
@@ -527,16 +517,13 @@ mod tests {
                 TokType::Semicolon
             ],
             &[Entry {
-                left: Spec {
-                    string: None,
-                    spectype: SpecType::match_expr(
-                        vec![(
-                            Expr::Os(vec!["linux".to_owned(), "windows".to_owned()]),
-                            Spec::from("a"),
-                        )],
-                        None,
-                    ),
-                },
+                left: Spec::from(SpecType::match_expr(
+                    vec![(
+                        Expr::Os(vec!["linux".to_owned(), "windows".to_owned()]),
+                        Spec::from("a"),
+                    )],
+                    None,
+                )),
                 right: None,
             }],
         )

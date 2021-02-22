@@ -279,15 +279,20 @@ impl MatchExpr {
 mod tests {
     use super::*;
 
+    use lazy_static::lazy_static;
+
     fn results_in(spec: Spec, expected: Vec<&str>) {
         let yielded: Vec<_> = spec.into_iter().collect();
         assert_eq!(yielded, expected);
     }
 
-    fn incorrect_os() -> Expr {
-        Expr::Os(vec![
-            if cfg!(windows) { "linux" } else { "windows" }.to_owned()
-        ])
+    lazy_static! {
+        static ref HOSTNAME: String = hostname::get().unwrap().into_string().unwrap();
+        // Ensure that `NOT_HOSTNAME` contains a hostname that isn't equal to `HOSTNAME`.
+        static ref NOT_HOSTNAME: String = if HOSTNAME.clone().is_empty() { "hostname" } else { "" }.to_owned();
+        static ref OS : String = std::env::consts::OS.to_owned();
+        static ref NOT_OS: String =
+            if cfg!(windows) { "linux" } else { "windows" }.to_owned();
     }
 
     #[test]
@@ -314,7 +319,7 @@ mod tests {
                 string: Some("d".to_owned()),
                 spectype: SpecType::match_expr(
                     vec![
-                        (incorrect_os(), Spec::from("g")),
+                        (Expr::Os(vec![NOT_OS.clone()]), Spec::from("g")),
                         (Expr::Any, Spec::from("e")),
                     ],
                     Some(Spec::from("f")),
@@ -331,7 +336,7 @@ mod tests {
             Spec {
                 string: Some("d".to_owned()),
                 spectype: SpecType::match_expr(
-                    vec![(incorrect_os(), Spec::from("g"))],
+                    vec![(Expr::Os(vec![NOT_OS.clone()]), Spec::from("g"))],
                     Some(Spec::from("f")),
                 ),
             },
@@ -345,19 +350,68 @@ mod tests {
     #[test]
     fn hostname_match() {
         results_in(
-            Spec {
-                string: None,
-                spectype: SpecType::match_expr(
-                    vec![(
-                        Expr::Host(vec![hostname::get().unwrap().into_string().unwrap()]),
-                        Spec::from("a"),
-                    )],
-                    None,
-                ),
-            },
+            Spec::from(SpecType::match_expr(
+                vec![(Expr::Host(vec![HOSTNAME.clone()]), Spec::from("a"))],
+                None,
+            )),
             // It will always resolve,
             // because it has the same hostname.
             vec!["a"],
+        )
+    }
+
+    #[test]
+    fn not_hostname_match() {
+        results_in(
+            Spec::from(SpecType::match_expr(
+                vec![(Expr::NotHost(vec![NOT_HOSTNAME.clone()]), Spec::from("a"))],
+                None,
+            )),
+            vec!["a"],
+        )
+    }
+
+    #[test]
+    fn not_hostname_multiple_match() {
+        // Get hostname that is different to `HOSTNAME`.
+        results_in(
+            Spec::from(SpecType::match_expr(
+                vec![(
+                    Expr::NotHost(vec![NOT_HOSTNAME.clone(), HOSTNAME.clone()]),
+                    Spec::from("a"),
+                )],
+                None,
+            )),
+            // Expect nothing to be resolved as all hostnames given in !host should not match.
+            vec![],
+        )
+    }
+
+    #[test]
+    fn not_os_match() {
+        results_in(
+            Spec::from(SpecType::match_expr(
+                vec![(Expr::NotOs(vec![NOT_OS.clone()]), Spec::from("a"))],
+                None,
+            )),
+            // The os given to NotOs is an incorrect_os which means it should resolve.
+            vec!["a"],
+        )
+    }
+
+    #[test]
+    fn not_os_multiple_match() {
+        results_in(
+            Spec::from(SpecType::match_expr(
+                vec![(
+                    Expr::NotOs(vec![NOT_OS.clone(), OS.clone()]),
+                    Spec::from("a"),
+                )],
+                None,
+            )),
+            // Expect nothing as actual OS is given as NotOs.
+            // Multiple NotOs should mean that none of the given OS match.
+            vec![],
         )
     }
 
@@ -409,25 +463,16 @@ mod tests {
         let res_vec_str = res_vec.iter().map(|x| x.as_str()).collect();
         results_in(
             // Equivalent to `[a,b,c][d,e,f][g,h,i]`.
-            Spec {
-                string: None,
-                spectype: SpecType::variant_expr(
-                    vec![Spec::from("a"), Spec::from("b"), Spec::from("c")],
-                    Some(Spec {
-                        spectype: SpecType::variant_expr(
-                            vec![Spec::from("d"), Spec::from("e"), Spec::from("f")],
-                            Some(Spec {
-                                string: None,
-                                spectype: SpecType::variant_expr(
-                                    vec![Spec::from("g"), Spec::from("h"), Spec::from("i")],
-                                    None,
-                                ),
-                            }),
-                        ),
-                        string: None,
-                    }),
-                ),
-            },
+            Spec::from(SpecType::variant_expr(
+                vec![Spec::from("a"), Spec::from("b"), Spec::from("c")],
+                Some(Spec::from(SpecType::variant_expr(
+                    vec![Spec::from("d"), Spec::from("e"), Spec::from("f")],
+                    Some(Spec::from(SpecType::variant_expr(
+                        vec![Spec::from("g"), Spec::from("h"), Spec::from("i")],
+                        None,
+                    ))),
+                ))),
+            )),
             res_vec_str,
         );
     }
