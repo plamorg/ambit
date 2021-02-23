@@ -17,13 +17,14 @@ pub struct AmbitTester {
 impl AmbitTester {
     // Allow temp_dir to be passed so it can be owned from outside of the struct.
     fn from_temp_dir(temp_dir: &TempDir) -> Self {
-        let config_path = temp_dir.path().join("config.ambit");
-        let repo_path = temp_dir.path().join("repo");
-        let host_path = temp_dir.path().into();
+        let temp_dir_path = temp_dir.path();
+        let config_path = temp_dir_path.join("config.ambit");
+        let repo_path = temp_dir_path.join("repo");
+        let host_path = temp_dir_path.to_path_buf();
         let mut executable = Command::cargo_bin("ambit").unwrap();
         // Set environment variables.
         // AMBIT_HOME_PATH is set as temp_dir. This is important as it will be the prefix path of potential synced files.
-        executable.env("AMBIT_HOME_PATH", temp_dir.path().as_os_str());
+        executable.env("AMBIT_HOME_PATH", host_path.as_os_str());
         executable.env("AMBIT_CONFIG_PATH", config_path.as_os_str());
         executable.env("AMBIT_REPO_PATH", repo_path.as_os_str());
         Self {
@@ -55,7 +56,6 @@ impl AmbitTester {
     // Creates configuration file and repository directory with .git.
     fn with_default_paths(self) -> Self {
         fs::create_dir_all(&self.repo_path.join(".git")).unwrap();
-        fs::create_dir_all(&self.host_path).unwrap();
         File::create(&self.config_path).unwrap();
         self
     }
@@ -136,10 +136,10 @@ fn sync_without_repo() {
 fn sync_host_file_already_exists() {
     // The host file already exists but is not symlinked to repo file.
     let temp_dir = TempDir::new().unwrap();
-    File::create(temp_dir.path().join("host.txt")).unwrap();
     AmbitTester::from_temp_dir(&temp_dir)
         .with_default_paths()
         .with_repo_file("repo.txt")
+        .with_host_file("host.txt")
         .with_config("repo.txt => host.txt;")
         .arg("sync")
         .assert()
