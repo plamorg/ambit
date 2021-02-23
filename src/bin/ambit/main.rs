@@ -53,8 +53,8 @@ fn get_app() -> App<'static, 'static> {
                     Arg::with_name("move")
                         .long("move")
                         .short("m")
-                        .help("Automatically move config files into repo")
-                        .long_help("Will automatically move config files into repository (as well as symlinking them normally) if they aren't already symlinks into the repo."),
+                        .help("Move host files into dotfile repository if needed")
+                        .long_help("Will automatically move host files into repository if they don't already exist in the repository and then symlink them"),
                 ),
         )
         .subcommand(SubCommand::with_name("check").about("Check ambit configuration for errors"))

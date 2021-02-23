@@ -84,7 +84,7 @@ pub fn sync(dry_run: bool, quiet: bool, move_files: bool) -> AmbitResult<()> {
         ));
     }
     let mut successful_syncs: usize = 0; // Number of syncs that actually occurred
-    let mut total_symlinks: usize = 0;
+    let mut total_syncs: usize = 0;
     let mut link = |repo_filename: &str, host_filename: &str| -> AmbitResult<()> {
         let host_file = AmbitPath::new(
             AMBIT_PATHS.home.path.join(host_filename),
@@ -167,7 +167,7 @@ pub fn sync(dry_run: bool, quiet: bool, move_files: bool) -> AmbitResult<()> {
                 );
             }
         }
-        total_symlinks += 1;
+        total_syncs += 1;
         Ok(())
     };
     let entries = get_config_entries()?;
@@ -193,9 +193,9 @@ pub fn sync(dry_run: bool, quiet: bool, move_files: bool) -> AmbitResult<()> {
     // Report the number of files symlinked
     println!(
         "sync result ({} total): {} synced; {} ignored",
-        total_symlinks,
+        total_syncs,
         successful_syncs,
-        total_symlinks - successful_syncs,
+        total_syncs - successful_syncs,
     );
     Ok(())
 }
