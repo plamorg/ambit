@@ -76,15 +76,15 @@ pub fn check() -> AmbitResult<()> {
 }
 
 // Sync files in dotfile repository to system through symbolic links
-pub fn sync(dry_run: bool, quiet: bool) -> AmbitResult<()> {
+pub fn sync(dry_run: bool, quiet: bool, move_files: bool) -> AmbitResult<()> {
     // Only symlink if repo and git directories exist
     if !(AMBIT_PATHS.repo.exists() && AMBIT_PATHS.git.exists()) {
         return Err(AmbitError::Other(
             "Dotfile repository does not exist. Run `init` or `clone` before syncing.".to_owned(),
         ));
     }
-    let mut successful_symlinks: usize = 0; // Number of symlinks that actually occurred
-    let mut total_symlinks: usize = 0;
+    let mut successful_syncs: usize = 0; // Number of syncs that actually occurred
+    let mut total_syncs: usize = 0;
     let mut link = |repo_filename: &str, host_filename: &str| -> AmbitResult<()> {
         let host_file = AmbitPath::new(
             AMBIT_PATHS.home.path.join(host_filename),
@@ -100,9 +100,13 @@ pub fn sync(dry_run: bool, quiet: bool) -> AmbitResult<()> {
             .map(|link_path| link_path == repo_file.path)
             .unwrap_or(false);
 
-        if host_file.exists() && !already_symlinked {
+        // cache for later
+        let host_file_exists = host_file.exists();
+        let repo_file_exists = repo_file.exists();
+
+        if host_file_exists && !already_symlinked && !move_files {
             // Host file already exists but is not symlinked correctly
-            return Err(AmbitError::Symlink {
+            return Err(AmbitError::Sync {
                 host_file_path: host_file.path,
                 repo_file_path: repo_file.path,
                 error: Box::new(AmbitError::Other(
@@ -110,8 +114,8 @@ pub fn sync(dry_run: bool, quiet: bool) -> AmbitResult<()> {
                 )),
             });
         }
-        if !repo_file.exists() {
-            return Err(AmbitError::Symlink {
+        if !repo_file_exists && !move_files {
+            return Err(AmbitError::Sync {
                 host_file_path: host_file.path,
                 repo_file_path: repo_file.path,
                 error: Box::new(AmbitError::Other(
@@ -120,31 +124,50 @@ pub fn sync(dry_run: bool, quiet: bool) -> AmbitResult<()> {
             });
         }
         if !already_symlinked {
+            let mut moved = false;
             if !dry_run {
-                if let Some(parent) = host_file.path.parent() {
-                    // Create parent directories of host file if it does not terminate in a root or prefix.
-                    fs::create_dir_all(parent)?;
+                fn ensure_parent_dirs_exist(file: &AmbitPath) -> AmbitResult<()> {
+                    if let Some(parent) = file.path.parent() {
+                        fs::create_dir_all(parent)?;
+                    }
+                    Ok(())
+                }
+                if host_file_exists && !repo_file_exists && move_files {
+                    // Automatically move the file into the repo
+                    ensure_parent_dirs_exist(&repo_file)?;
+                    fs::rename(&host_file.path, &repo_file.path)?;
+                    moved = true;
+                } else {
+                    ensure_parent_dirs_exist(&host_file)?;
                 }
                 // Attempt to perform symlink
                 if let Err(e) = symlink(&repo_file.path, &host_file.path) {
                     // Symlink went wrong
-                    return Err(AmbitError::Symlink {
+                    return Err(AmbitError::Sync {
                         host_file_path: host_file.path,
                         repo_file_path: repo_file.path,
                         error: Box::new(AmbitError::Io(e)),
                     });
                 }
-                successful_symlinks += 1;
+                successful_syncs += 1;
             }
             if !quiet {
+                let action = match moved {
+                    true => "Moved",
+                    false => match !dry_run {
+                        true => "Synced",
+                        false => "Ignored",
+                    },
+                };
                 println!(
-                    "{} -> {}",
+                    "{} {} -> {}",
+                    action,
                     host_file.path.display(),
                     repo_file.path.display()
                 );
             }
         }
-        total_symlinks += 1;
+        total_syncs += 1;
         Ok(())
     };
     let entries = get_config_entries()?;
@@ -170,9 +193,9 @@ pub fn sync(dry_run: bool, quiet: bool) -> AmbitResult<()> {
     // Report the number of files symlinked
     println!(
         "sync result ({} total): {} synced; {} ignored",
-        total_symlinks,
-        successful_symlinks,
-        total_symlinks - successful_symlinks,
+        total_syncs,
+        successful_syncs,
+        total_syncs - successful_syncs,
     );
     Ok(())
 }

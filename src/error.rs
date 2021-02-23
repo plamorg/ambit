@@ -23,7 +23,7 @@ pub enum AmbitError {
         path: PathBuf,
         error: io::Error,
     },
-    Symlink {
+    Sync {
         host_file_path: PathBuf,
         repo_file_path: PathBuf,
         error: Box<AmbitError>,
@@ -35,7 +35,7 @@ impl Error for AmbitError {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         match self {
             AmbitError::File { error, .. } => Some(error),
-            AmbitError::Symlink { error, .. } => Some(error),
+            AmbitError::Sync { error, .. } => Some(error),
             _ => None,
         }
     }
@@ -49,7 +49,7 @@ impl Display for AmbitError {
             AmbitError::File { path, .. } => {
                 f.write_fmt(format_args!("File error with `{}`", path.display()))
             }
-            AmbitError::Symlink {
+            AmbitError::Sync {
                 repo_file_path,
                 host_file_path,
                 ..
@@ -119,7 +119,7 @@ Caused by:
 
     #[test]
     fn display_symlink() {
-        let err = AmbitError::Symlink {
+        let err = AmbitError::Sync {
             host_file_path: PathBuf::from("host"),
             repo_file_path: PathBuf::from("repo"),
             error: Box::new(AmbitError::Other("Error message".to_owned())),

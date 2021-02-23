@@ -10,23 +10,27 @@ use tempfile::TempDir;
 pub struct AmbitTester {
     config_path: PathBuf,
     repo_path: PathBuf,
+    host_path: PathBuf,
     executable: Command,
 }
 // Builder pattern implementation
 impl AmbitTester {
     // Allow temp_dir to be passed so it can be owned from outside of the struct.
     fn from_temp_dir(temp_dir: &TempDir) -> Self {
-        let config_path = temp_dir.path().join("config.ambit");
-        let repo_path = temp_dir.path().join("repo");
+        let temp_dir_path = temp_dir.path();
+        let config_path = temp_dir_path.join("config.ambit");
+        let repo_path = temp_dir_path.join("repo");
+        let host_path = temp_dir_path.to_path_buf();
         let mut executable = Command::cargo_bin("ambit").unwrap();
         // Set environment variables.
         // AMBIT_HOME_PATH is set as temp_dir. This is important as it will be the prefix path of potential synced files.
-        executable.env("AMBIT_HOME_PATH", temp_dir.path().as_os_str());
+        executable.env("AMBIT_HOME_PATH", host_path.as_os_str());
         executable.env("AMBIT_CONFIG_PATH", config_path.as_os_str());
         executable.env("AMBIT_REPO_PATH", repo_path.as_os_str());
         Self {
             config_path,
             repo_path,
+            host_path,
             executable,
         }
     }
@@ -40,6 +44,12 @@ impl AmbitTester {
     // Create a custom file in repo_path directory. Mimics repo_file.
     fn with_repo_file(self, name: &str) -> Self {
         File::create(self.repo_path.join(name)).unwrap();
+        self
+    }
+
+    // Creates a custom file in home_path directory. Mimic host_file.
+    fn with_host_file(self, name: &str) -> Self {
+        File::create(self.host_path.join(name)).unwrap();
         self
     }
 
@@ -126,10 +136,10 @@ fn sync_without_repo() {
 fn sync_host_file_already_exists() {
     // The host file already exists but is not symlinked to repo file.
     let temp_dir = TempDir::new().unwrap();
-    File::create(temp_dir.path().join("host.txt")).unwrap();
     AmbitTester::from_temp_dir(&temp_dir)
         .with_default_paths()
         .with_repo_file("repo.txt")
+        .with_host_file("host.txt")
         .with_config("repo.txt => host.txt;")
         .arg("sync")
         .assert()
@@ -158,6 +168,25 @@ fn sync_normal() {
         .assert()
         .success();
     // Assert that host.txt is symlinked to repo.txt
+    assert!(is_symlinked(
+        temp_dir.path().join("host.txt"),
+        temp_dir.path().join("repo").join("repo.txt")
+    ));
+}
+
+#[test]
+fn sync_move_normal() {
+    let temp_dir = TempDir::new().unwrap();
+    AmbitTester::from_temp_dir(&temp_dir)
+        .with_default_paths()
+        .with_config("repo.txt => host.txt;")
+        .with_host_file("host.txt")
+        .args(vec!["sync", "-m"])
+        .assert()
+        .success();
+    // The new `repo.txt` should now exist
+    assert!(temp_dir.path().join("repo").join("repo.txt").exists());
+    // The symlink should still succeed
     assert!(is_symlinked(
         temp_dir.path().join("host.txt"),
         temp_dir.path().join("repo").join("repo.txt")

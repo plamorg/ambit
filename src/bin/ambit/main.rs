@@ -48,6 +48,13 @@ fn get_app() -> App<'static, 'static> {
                         .long("quiet")
                         .short("q")
                         .help("Don't report individual symlinks"),
+                )
+                .arg(
+                    Arg::with_name("move")
+                        .long("move")
+                        .short("m")
+                        .help("Move host files into dotfile repository if needed")
+                        .long_help("Will automatically move host files into repository if they don't already exist in the repository and then symlink them"),
                 ),
         )
         .subcommand(SubCommand::with_name("check").about("Check ambit configuration for errors"))
@@ -72,7 +79,8 @@ fn run() -> AmbitResult<()> {
     } else if let Some(matches) = matches.subcommand_matches("sync") {
         let dry_run = matches.is_present("dry-run");
         let quiet = matches.is_present("quiet");
-        cmd::sync(dry_run, quiet)?;
+        let move_files = matches.is_present("move");
+        cmd::sync(dry_run, quiet, move_files)?;
     }
     Ok(())
 }
