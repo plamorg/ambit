@@ -19,6 +19,7 @@ use crate::directories::{AmbitPath, AmbitPathKind, AMBIT_PATHS};
 // Initialize config and repository directory
 fn ensure_paths_exist(force: bool) -> AmbitResult<()> {
     if !AMBIT_PATHS.config.exists() {
+        AMBIT_PATHS.config.ensure_parent_dirs_exist()?;
         AMBIT_PATHS.config.create()?;
     }
     if AMBIT_PATHS.repo.exists() && !force {
@@ -126,19 +127,13 @@ pub fn sync(dry_run: bool, quiet: bool, move_files: bool) -> AmbitResult<()> {
         if !already_symlinked {
             let mut moved = false;
             if !dry_run {
-                fn ensure_parent_dirs_exist(file: &AmbitPath) -> AmbitResult<()> {
-                    if let Some(parent) = file.path.parent() {
-                        fs::create_dir_all(parent)?;
-                    }
-                    Ok(())
-                }
                 if host_file_exists && !repo_file_exists && move_files {
                     // Automatically move the file into the repo
-                    ensure_parent_dirs_exist(&repo_file)?;
+                    repo_file.ensure_parent_dirs_exist()?;
                     fs::rename(&host_file.path, &repo_file.path)?;
                     moved = true;
                 } else {
-                    ensure_parent_dirs_exist(&host_file)?;
+                    host_file.ensure_parent_dirs_exist()?;
                 }
                 // Attempt to perform symlink
                 if let Err(e) = symlink(&repo_file.path, &host_file.path) {
