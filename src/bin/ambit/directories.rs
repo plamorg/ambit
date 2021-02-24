@@ -69,6 +69,9 @@ impl AmbitPath {
     pub fn create(&self) -> AmbitResult<()> {
         match self.kind {
             AmbitPathKind::File => {
+                if let Some(parent) = &self.path.parent() {
+                    fs::create_dir_all(parent)?;
+                }
                 File::create(&self.path)?;
             }
             AmbitPathKind::Directory => {
