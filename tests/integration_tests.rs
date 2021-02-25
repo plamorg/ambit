@@ -2,7 +2,7 @@ use assert_cmd::{assert::Assert, Command};
 use std::{
     ffi::OsStr,
     fs::{self, File},
-    path::PathBuf,
+    path::{Path, PathBuf},
 };
 use tempfile::TempDir;
 
@@ -109,6 +109,19 @@ fn init_force_overwrites() {
     AmbitTester::default()
         .with_default_paths()
         .args(vec!["init", "-f"])
+        .assert()
+        .success();
+}
+
+#[test]
+fn init_ambit_config_dir_does_not_exist() {
+    // Ensure that temp_dir configuration directory is created when init is called.
+    let temp_dir = TempDir::new().unwrap();
+    // temp_path is equal to temp_dir path which is then removed.
+    let temp_path = Path::new(temp_dir.path());
+    fs::remove_dir(temp_path).unwrap();
+    AmbitTester::from_temp_dir(&temp_dir)
+        .arg("init")
         .assert()
         .success();
 }

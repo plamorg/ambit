@@ -32,6 +32,13 @@ impl AmbitPath {
         }
     }
 
+    pub fn ensure_parent_dirs_exist(&self) -> AmbitResult<()> {
+        if let Some(parent) = &self.path.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        Ok(())
+    }
+
     pub fn to_str(&self) -> AmbitResult<&str> {
         // Converts path to string slice representation
         let result = self.path.to_str();
