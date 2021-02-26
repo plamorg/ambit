@@ -6,6 +6,7 @@ use std::os::windows::fs::symlink_file as symlink;
 use std::{
     fs,
     io::{self, Write},
+    path::PathBuf,
     process::Command,
 };
 
@@ -40,6 +41,13 @@ fn get_config_entries() -> AmbitResult<Vec<config::Entry>> {
     config::get_entries(content.chars().peekable())
         .collect::<Result<Vec<_>, _>>()
         .map_err(AmbitError::Parse)
+}
+
+// Returns if a is symlinked to b (a -> b).
+fn is_symlinked(a: &PathBuf, b: &PathBuf) -> bool {
+    fs::read_link(a)
+        .map(|link_path| link_path == *b)
+        .unwrap_or(false)
 }
 
 // Initialize an empty dotfile repository
@@ -86,21 +94,9 @@ pub fn sync(dry_run: bool, quiet: bool, move_files: bool) -> AmbitResult<()> {
     }
     let mut successful_syncs: usize = 0; // Number of syncs that actually occurred
     let mut total_syncs: usize = 0;
-    let mut link = |repo_filename: &str, host_filename: &str| -> AmbitResult<()> {
-        let host_file = AmbitPath::new(
-            AMBIT_PATHS.home.path.join(host_filename),
-            AmbitPathKind::File,
-        );
-        let repo_file = AmbitPath::new(
-            AMBIT_PATHS.repo.path.join(repo_filename),
-            AmbitPathKind::File,
-        );
-
+    let mut link = |repo_file: AmbitPath, host_file: AmbitPath| -> AmbitResult<()> {
         // already_symlinked holds whether host_file already links to repo_file
-        let already_symlinked = fs::read_link(&host_file.path)
-            .map(|link_path| link_path == repo_file.path)
-            .unwrap_or(false);
-
+        let already_symlinked = is_symlinked(&host_file.path, &repo_file.path);
         // cache for later
         let host_file_exists = host_file.exists();
         let repo_file_exists = repo_file.exists();
@@ -167,23 +163,17 @@ pub fn sync(dry_run: bool, quiet: bool, move_files: bool) -> AmbitResult<()> {
     };
     let entries = get_config_entries()?;
     for entry in entries {
-        let left_paths = entry.left.into_iter();
-        match entry.right {
-            Some(right_spec) => {
-                let right_paths = right_spec.into_iter();
-                for (repo_file, host_file) in left_paths.zip(right_paths) {
-                    // Attempt to link REPO/left => HOME/right.
-                    link(&repo_file, &host_file)?;
-                }
-            }
-            None => {
-                // If there is no right spec, the path from home directory is equal to left spec.
-                // Hence, we effectively link REPO/left => HOME/left.
-                for file in left_paths {
-                    link(&file, &file)?;
-                }
-            }
-        };
+        let repo_paths = entry.left.into_iter();
+        let host_paths = entry.right.as_ref().unwrap_or(&entry.left).into_iter();
+        for (repo_path, host_path) in repo_paths
+            .zip(host_paths)
+            .map(|(a, b)| (PathBuf::from(a), PathBuf::from(b)))
+        {
+            link(
+                AmbitPath::new(AMBIT_PATHS.repo.path.join(repo_path), AmbitPathKind::File),
+                AmbitPath::new(AMBIT_PATHS.home.path.join(host_path), AmbitPathKind::File),
+            )?;
+        }
     }
     // Report the number of files symlinked
     println!(
@@ -191,6 +181,38 @@ pub fn sync(dry_run: bool, quiet: bool, move_files: bool) -> AmbitResult<()> {
         total_syncs,
         successful_syncs,
         total_syncs - successful_syncs,
+    );
+    Ok(())
+}
+
+// Remove all symlinks and delete host files
+pub fn clean() -> AmbitResult<()> {
+    let entries = get_config_entries()?;
+    let mut total_syncs: usize = 0;
+    let mut deletions: usize = 0;
+    for entry in entries {
+        let repo_paths = entry.left.into_iter();
+        let host_paths = entry.right.as_ref().unwrap_or(&entry.left).into_iter();
+        for (repo_path, host_path) in repo_paths
+            .zip(host_paths)
+            .map(|(a, b)| (PathBuf::from(a), PathBuf::from(b)))
+        {
+            let host_file =
+                AmbitPath::new(AMBIT_PATHS.home.path.join(host_path), AmbitPathKind::File);
+            let repo_file =
+                AmbitPath::new(AMBIT_PATHS.repo.path.join(repo_path), AmbitPathKind::File);
+            if is_symlinked(&host_file.path, &repo_file.path) {
+                host_file.remove()?;
+                deletions += 1;
+            }
+            total_syncs += 1;
+        }
+    }
+    println!(
+        "clean result ({} total): {} deleted: {} ignored",
+        total_syncs,
+        deletions,
+        total_syncs - deletions
     );
     Ok(())
 }

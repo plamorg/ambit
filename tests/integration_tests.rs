@@ -238,3 +238,22 @@ fn sync_creates_host_parent_directories() {
         temp_dir.path().join("repo").join("repo.txt"),
     ));
 }
+
+#[test]
+fn clean_after_sync() {
+    let temp_dir = TempDir::new().unwrap();
+    AmbitTester::from_temp_dir(&temp_dir)
+        .with_default_paths()
+        .with_repo_file("repo.txt")
+        .with_config("repo.txt => host.txt;")
+        .arg("sync")
+        .assert()
+        .success();
+    AmbitTester::from_temp_dir(&temp_dir)
+        .with_config("repo.txt => host.txt;")
+        .arg("clean")
+        .assert()
+        .success();
+    // host.txt should be deleted
+    assert!(!temp_dir.path().join("host.txt").exists());
+}

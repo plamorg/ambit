@@ -57,6 +57,10 @@ fn get_app() -> App<'static, 'static> {
                         .long_help("Will automatically move host files into repository if they don't already exist in the repository and then symlink them"),
                 ),
         )
+        .subcommand(
+            SubCommand::with_name("clean")
+            .about("Remove all symlinks and delete host files")
+        )
         .subcommand(SubCommand::with_name("check").about("Check ambit configuration for errors"))
 }
 
@@ -81,6 +85,8 @@ fn run() -> AmbitResult<()> {
         let quiet = matches.is_present("quiet");
         let move_files = matches.is_present("move");
         cmd::sync(dry_run, quiet, move_files)?;
+    } else if matches.is_present("clean") {
+        cmd::clean()?;
     }
     Ok(())
 }
