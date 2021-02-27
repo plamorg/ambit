@@ -8,6 +8,8 @@ use std::{
 
 use ambit::error::{AmbitError, AmbitResult};
 
+pub const CONFIG_NAME: &str = "config.ambit";
+
 #[derive(PartialEq, Eq, Debug)]
 pub enum AmbitPathKind {
     File,
@@ -110,7 +112,7 @@ impl AmbitPaths {
         let configuration_path = home_path.join(".config/ambit");
 
         let config_path = AmbitPaths::get_path_from_env("AMBIT_CONFIG_PATH")
-            .unwrap_or_else(|| configuration_path.join("config.ambit"));
+            .unwrap_or_else(|| configuration_path.join(CONFIG_NAME));
 
         let repo_path = AmbitPaths::get_path_from_env("AMBIT_REPO_PATH")
             .unwrap_or_else(|| configuration_path.join("repo"));

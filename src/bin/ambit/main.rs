@@ -55,7 +55,12 @@ fn get_app() -> App<'static, 'static> {
                         .short("m")
                         .help("Move host files into dotfile repository if needed")
                         .long_help("Will automatically move host files into repository if they don't already exist in the repository and then symlink them"),
-                ),
+                )
+                .arg(
+                    Arg::with_name("use-repo-config")
+                    .long("use-repo-config")
+                    .help("Recursively search dotfile repository for configuration file and use it to sync")
+                )
         )
         .subcommand(
             SubCommand::with_name("clean")
@@ -84,7 +89,8 @@ fn run() -> AmbitResult<()> {
         let dry_run = matches.is_present("dry-run");
         let quiet = matches.is_present("quiet");
         let move_files = matches.is_present("move");
-        cmd::sync(dry_run, quiet, move_files)?;
+        let use_repo_config = matches.is_present("use-repo-config");
+        cmd::sync(dry_run, quiet, move_files, use_repo_config)?;
     } else if matches.is_present("clean") {
         cmd::clean()?;
     }
