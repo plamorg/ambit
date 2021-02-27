@@ -242,6 +242,7 @@ fn sync_creates_host_parent_directories() {
 #[test]
 fn clean_after_sync() {
     let temp_dir = TempDir::new().unwrap();
+    let host_path = temp_dir.path().join("host.txt");
     AmbitTester::from_temp_dir(&temp_dir)
         .with_default_paths()
         .with_repo_file("repo.txt")
@@ -249,11 +250,13 @@ fn clean_after_sync() {
         .arg("sync")
         .assert()
         .success();
+    // host.txt should exist after sync.
+    assert!(host_path.exists());
     AmbitTester::from_temp_dir(&temp_dir)
         .with_config("repo.txt => host.txt;")
         .arg("clean")
         .assert()
         .success();
-    // host.txt should be deleted
-    assert!(!temp_dir.path().join("host.txt").exists());
+    // host.txt should be deleted after clean.
+    assert!(!host_path.exists());
 }

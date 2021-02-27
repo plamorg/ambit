@@ -11,7 +11,7 @@ use std::{
 };
 
 use ambit::{
-    config,
+    config::{self, Entry},
     error::{AmbitError, AmbitResult},
 };
 
@@ -36,7 +36,7 @@ fn ensure_paths_exist(force: bool) -> AmbitResult<()> {
 }
 
 // Fetch entries from config file and return as vector
-fn get_config_entries() -> AmbitResult<Vec<config::Entry>> {
+fn get_config_entries() -> AmbitResult<Vec<Entry>> {
     let content = AMBIT_PATHS.config.as_string()?;
     config::get_entries(content.chars().peekable())
         .collect::<Result<Vec<_>, _>>()
@@ -48,6 +48,26 @@ fn is_symlinked(a: &PathBuf, b: &PathBuf) -> bool {
     fs::read_link(a)
         .map(|link_path| link_path == *b)
         .unwrap_or(false)
+}
+
+// Return iterator over path pairs from given entry.
+fn get_ambit_paths_from_entry<'a>(
+    entry: &'a Entry,
+) -> Box<dyn Iterator<Item = (AmbitPath, AmbitPath)> + 'a> {
+    Box::new(
+        entry
+            .left
+            .into_iter()
+            // If entry.right is None, entry.left is considered to be both repo and host path.
+            .zip(entry.right.as_ref().unwrap_or(&entry.left).into_iter())
+            .map(|(repo_path, host_path)| {
+                // Wrap the given paths as AmbitPath.
+                (
+                    AmbitPath::new(AMBIT_PATHS.repo.path.join(repo_path), AmbitPathKind::File),
+                    AmbitPath::new(AMBIT_PATHS.home.path.join(host_path), AmbitPathKind::File),
+                )
+            }),
+    )
 }
 
 // Initialize an empty dotfile repository
@@ -163,16 +183,9 @@ pub fn sync(dry_run: bool, quiet: bool, move_files: bool) -> AmbitResult<()> {
     };
     let entries = get_config_entries()?;
     for entry in entries {
-        let repo_paths = entry.left.into_iter();
-        let host_paths = entry.right.as_ref().unwrap_or(&entry.left).into_iter();
-        for (repo_path, host_path) in repo_paths
-            .zip(host_paths)
-            .map(|(a, b)| (PathBuf::from(a), PathBuf::from(b)))
-        {
-            link(
-                AmbitPath::new(AMBIT_PATHS.repo.path.join(repo_path), AmbitPathKind::File),
-                AmbitPath::new(AMBIT_PATHS.home.path.join(host_path), AmbitPathKind::File),
-            )?;
+        let paths = get_ambit_paths_from_entry(&entry);
+        for (repo_file, host_file) in paths {
+            link(repo_file, host_file)?;
         }
     }
     // Report the number of files symlinked
@@ -185,22 +198,14 @@ pub fn sync(dry_run: bool, quiet: bool, move_files: bool) -> AmbitResult<()> {
     Ok(())
 }
 
-// Remove all symlinks and delete host files
+// Remove all symlinks and delete host files.
 pub fn clean() -> AmbitResult<()> {
     let entries = get_config_entries()?;
     let mut total_syncs: usize = 0;
     let mut deletions: usize = 0;
     for entry in entries {
-        let repo_paths = entry.left.into_iter();
-        let host_paths = entry.right.as_ref().unwrap_or(&entry.left).into_iter();
-        for (repo_path, host_path) in repo_paths
-            .zip(host_paths)
-            .map(|(a, b)| (PathBuf::from(a), PathBuf::from(b)))
-        {
-            let host_file =
-                AmbitPath::new(AMBIT_PATHS.home.path.join(host_path), AmbitPathKind::File);
-            let repo_file =
-                AmbitPath::new(AMBIT_PATHS.repo.path.join(repo_path), AmbitPathKind::File);
+        let paths = get_ambit_paths_from_entry(&entry);
+        for (repo_file, host_file) in paths {
             if is_symlinked(&host_file.path, &repo_file.path) {
                 host_file.remove()?;
                 deletions += 1;
