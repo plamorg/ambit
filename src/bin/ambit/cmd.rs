@@ -43,14 +43,14 @@ fn get_config_entries() -> AmbitResult<Vec<Entry>> {
         .map_err(AmbitError::Parse)
 }
 
-// Returns if a is symlinked to b (a -> b).
-fn is_symlinked(a: &PathBuf, b: &PathBuf) -> bool {
-    fs::read_link(a)
-        .map(|link_path| link_path == *b)
+// Return if target is symlinked to source (target -> source).
+fn is_symlinked(target: &PathBuf, source: &PathBuf) -> bool {
+    fs::read_link(target)
+        .map(|link_path| link_path == *source)
         .unwrap_or(false)
 }
 
-// Return iterator over path pairs from given entry.
+// Return iterator over path pairs in the form of `(repo_file, host_file)` from given entry.
 fn get_ambit_paths_from_entry<'a>(
     entry: &'a Entry,
 ) -> Box<dyn Iterator<Item = (AmbitPath, AmbitPath)> + 'a> {
