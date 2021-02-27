@@ -43,10 +43,10 @@ fn get_config_entries() -> AmbitResult<Vec<Entry>> {
         .map_err(AmbitError::Parse)
 }
 
-// Return if target is symlinked to source (target -> source).
-fn is_symlinked(target: &PathBuf, source: &PathBuf) -> bool {
-    fs::read_link(target)
-        .map(|link_path| link_path == *source)
+// Return if link_name is symlinked to target (link_name -> target).
+fn is_symlinked(link_name: &PathBuf, target: &PathBuf) -> bool {
+    fs::read_link(link_name)
+        .map(|link_path| link_path == *target)
         .unwrap_or(false)
 }
 
