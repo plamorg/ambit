@@ -207,15 +207,18 @@ pub fn sync(
         if !use_repo_config {
             // Ask user if they want to search for repo config.
             println!(
-                "No configuration file in {}",
+                "No configuration file found in {}",
                 AMBIT_PATHS.config.path.display()
             );
-            print!("Search for configuration in repository? [y/n]: ");
+            print!("Search for configuration in repository? [Y/n] ");
+            io::stdout().flush()?;
             let mut answer = String::new();
             io::stdin().read_line(&mut answer)?;
-            if answer.to_lowercase() != "y" {
-                println!("Cancelling sync...");
-                return Ok(());
+            if let Some(answer) = answer.chars().next() {
+                if answer.to_lowercase().to_string() != "y" {
+                    println!("Cancelling sync...");
+                    return Ok(());
+                }
             }
         }
         println!(
