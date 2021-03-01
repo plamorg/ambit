@@ -73,18 +73,33 @@ fn get_ambit_paths_from_entry<'a>(
 }
 
 // Recursively search dotfile repository for config path.
-fn get_repo_config_path() -> AmbitResult<Option<PathBuf>> {
-    for entry in WalkDir::new(&AMBIT_PATHS.repo.path) {
-        if let Ok(entry) = entry {
-            let path = entry.path();
+fn get_repo_config_paths() -> Vec<PathBuf> {
+    let mut repo_config_paths = Vec::new();
+    for dir_entry in WalkDir::new(&AMBIT_PATHS.repo.path) {
+        if let Ok(dir_entry) = dir_entry {
+            let path = dir_entry.path();
             if let Some(file_name) = path.file_name() {
                 if file_name == CONFIG_NAME {
-                    return Ok(Some(path.to_path_buf()));
+                    repo_config_paths.push(path.to_path_buf());
                 }
             }
         }
     }
-    Ok(None)
+    repo_config_paths
+}
+
+// Prompt user for confirmation with message.
+fn prompt_confirm(message: &str) -> AmbitResult<bool> {
+    print!("{} [Y/n] ", message);
+    io::stdout().flush()?;
+    let mut answer = String::new();
+    io::stdin().read_line(&mut answer)?;
+    if let Some(answer) = answer.chars().next() {
+        if answer.to_lowercase().to_string() == "y" {
+            return Ok(true);
+        }
+    }
+    Ok(false)
 }
 
 // Initialize an empty dotfile repository
@@ -210,15 +225,9 @@ pub fn sync(
                 "No configuration file found in {}",
                 AMBIT_PATHS.config.path.display()
             );
-            print!("Search for configuration in repository? [Y/n] ");
-            io::stdout().flush()?;
-            let mut answer = String::new();
-            io::stdin().read_line(&mut answer)?;
-            if let Some(answer) = answer.chars().next() {
-                if answer.to_lowercase().to_string() != "y" {
-                    println!("Cancelling sync...");
-                    return Ok(());
-                }
+            if !prompt_confirm("Search for configuration in repository?")? {
+                println!("Ignoring sync...");
+                return Ok(());
             }
         }
         println!(
@@ -226,15 +235,24 @@ pub fn sync(
             CONFIG_NAME,
             AMBIT_PATHS.repo.path.display()
         );
-        let repo_config = match get_repo_config_path()? {
-            Some(path) => AmbitPath::new(path, AmbitPathKind::File),
+        let repo_config_paths = get_repo_config_paths();
+        let mut repo_config = None;
+        // Iterate through repo configuration files that were found.
+        for path in repo_config_paths {
+            if prompt_confirm(format!("Repo config found: {}. Use?", path.display()).as_str())? {
+                // config.ambit file has been found in repo and user has accepted it.
+                repo_config = Some(AmbitPath::new(path, AmbitPathKind::File));
+                break;
+            }
+        }
+        match repo_config {
+            Some(repo_config) => get_config_entries(&repo_config)?,
             None => {
                 return Err(AmbitError::Other(
                     "Could not find configuration file in dotfile repository.".to_owned(),
-                ))
+                ));
             }
-        };
-        get_config_entries(&repo_config)?
+        }
     } else {
         get_config_entries(&AMBIT_PATHS.config)?
     };

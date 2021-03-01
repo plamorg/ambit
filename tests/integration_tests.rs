@@ -266,6 +266,7 @@ fn sync_use_repo_config_option() {
         .with_repo_file("repo.txt")
         .with_file_with_content(&repo_config_path, "repo.txt => host.txt;")
         .args(vec!["sync", "--use-repo-config"])
+        .write_stdin("Y") // 'Y' should be synonymous to 'y'
         .assert()
         .success();
     assert!(is_symlinked(
@@ -283,7 +284,10 @@ fn sync_with_missing_config_answer_yes() {
         .with_repo_file("repo.txt")
         .with_file_with_content(&repo_config_path, "repo.txt => host.txt;")
         .arg("sync")
-        .write_stdin("y")
+        // Answer 'y' twice:
+        // 1. Accept to search for configuration.
+        // 2. Accept to use repo config that was found.
+        .write_stdin("y\ny")
         .assert()
         .success();
     assert!(is_symlinked(
