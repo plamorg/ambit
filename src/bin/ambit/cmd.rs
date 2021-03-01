@@ -97,11 +97,7 @@ fn prompt_confirm(message: &str) -> AmbitResult<bool> {
     io::stdout().flush()?;
     let mut answer = String::new();
     io::stdin().read_line(&mut answer)?;
-    if answer.trim().to_lowercase() == "y" {
-        Ok(true)
-    } else {
-        Ok(false)
-    }
+    Ok(answer.trim().to_lowercase() == "y")
 }
 
 // Initialize an empty dotfile repository
