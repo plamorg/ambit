@@ -55,7 +55,22 @@ fn get_app() -> App<'static, 'static> {
                         .short("m")
                         .help("Move host files into dotfile repository if needed")
                         .long_help("Will automatically move host files into repository if they don't already exist in the repository and then symlink them"),
-                ),
+                )
+                .arg(
+                    Arg::with_name("use-repo-config")
+                    .long("use-repo-config")
+                    .help("Recursively search dotfile repository for configuration file and use it to sync")
+                )
+                .arg(
+                    Arg::with_name("use-repo-config-if-required")
+                    .long("use-repo-config-if-required")
+                    .help("Search for configuration file in dotfile repository if configuration in default location does not exist")
+                )
+                .arg(
+                    Arg::with_name("use-any-repo-config-found")
+                    .long("use-any-repo-config-found")
+                    .help("Use first repository configuration found after recursive search")
+                )
         )
         .subcommand(
             SubCommand::with_name("clean")
@@ -84,7 +99,17 @@ fn run() -> AmbitResult<()> {
         let dry_run = matches.is_present("dry-run");
         let quiet = matches.is_present("quiet");
         let move_files = matches.is_present("move");
-        cmd::sync(dry_run, quiet, move_files)?;
+        let use_repo_config = matches.is_present("use-repo-config");
+        let use_repo_config_if_required = matches.is_present("use-repo-config-if-required");
+        let use_any_repo_config = matches.is_present("use-any-repo-config-found");
+        cmd::sync(
+            dry_run,
+            quiet,
+            move_files,
+            use_repo_config,
+            use_repo_config_if_required,
+            use_any_repo_config,
+        )?;
     } else if matches.is_present("clean") {
         cmd::clean()?;
     }
