@@ -316,6 +316,44 @@ fn sync_with_missing_config_answer_no() {
 }
 
 #[test]
+fn sync_use_repo_config_if_required() {
+    // Sync without existing configuration file and answer yes to use repo configuration instead.
+    let temp_dir = TempDir::new().unwrap();
+    let repo_config_path = temp_dir.path().join("repo").join("config.ambit");
+    AmbitTester::from_temp_dir(&temp_dir)
+        .with_repo_file("repo.txt")
+        .with_file_with_content(&repo_config_path, "repo.txt => host.txt;")
+        .args(vec!["sync", "--use-repo-config-if-required"])
+        // Only need to input 'y' once as --use-repo-config-if-required means that it will always
+        // search for repo config if config in default location does not exist.
+        .write_stdin("y")
+        .assert()
+        .success();
+    assert!(is_symlinked(
+        temp_dir.path().join("host.txt"),
+        temp_dir.path().join("repo").join("repo.txt"),
+    ));
+}
+
+#[test]
+fn sync_use_any_repo_config_found() {
+    let temp_dir = TempDir::new().unwrap();
+    let repo_path = temp_dir.path().join("repo");
+    AmbitTester::from_temp_dir(&temp_dir)
+        .with_repo_file("repo.txt")
+        .with_file_with_content(&repo_path.join("config.ambit"), "repo.txt => host.txt;")
+        .args(vec!["sync", "--use-any-repo-config-found"])
+        // With --use-any-repo-config-found flag, only one 'y' needs to be passed
+        .write_stdin("y")
+        .assert()
+        .success();
+    assert!(is_symlinked(
+        temp_dir.path().join("host.txt"),
+        temp_dir.path().join("repo").join("repo.txt"),
+    ));
+}
+
+#[test]
 fn clean_after_sync() {
     let temp_dir = TempDir::new().unwrap();
     let host_path = temp_dir.path().join("host.txt");

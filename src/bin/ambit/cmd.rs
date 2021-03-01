@@ -73,7 +73,7 @@ fn get_ambit_paths_from_entry<'a>(
 }
 
 // Recursively search dotfile repository for config path.
-fn get_repo_config_paths() -> Vec<PathBuf> {
+fn get_repo_config_paths(stop_at_first_found: bool) -> Vec<PathBuf> {
     let mut repo_config_paths = Vec::new();
     for dir_entry in WalkDir::new(&AMBIT_PATHS.repo.path) {
         if let Ok(dir_entry) = dir_entry {
@@ -81,6 +81,9 @@ fn get_repo_config_paths() -> Vec<PathBuf> {
             if let Some(file_name) = path.file_name() {
                 if file_name == CONFIG_NAME {
                     repo_config_paths.push(path.to_path_buf());
+                    if stop_at_first_found {
+                        break;
+                    }
                 }
             }
         }
@@ -94,12 +97,11 @@ fn prompt_confirm(message: &str) -> AmbitResult<bool> {
     io::stdout().flush()?;
     let mut answer = String::new();
     io::stdin().read_line(&mut answer)?;
-    if let Some(answer) = answer.chars().next() {
-        if answer.to_lowercase().to_string() == "y" {
-            return Ok(true);
-        }
+    if answer.trim().to_lowercase() == "y" {
+        Ok(true)
+    } else {
+        Ok(false)
     }
-    Ok(false)
 }
 
 // Initialize an empty dotfile repository
@@ -142,6 +144,8 @@ pub fn sync(
     quiet: bool,
     move_files: bool,
     use_repo_config: bool,
+    use_repo_config_if_required: bool,
+    use_any_repo_config: bool,
 ) -> AmbitResult<()> {
     // Only symlink if repo and git directories exist
     if !(AMBIT_PATHS.repo.exists() && AMBIT_PATHS.git.exists()) {
@@ -225,7 +229,10 @@ pub fn sync(
                 "No configuration file found in {}",
                 AMBIT_PATHS.config.path.display()
             );
-            if !prompt_confirm("Search for configuration in repository?")? {
+            // No need to prompt if `use_repo_config_if_required` is true.
+            if !use_repo_config_if_required
+                && !prompt_confirm("Search for configuration in repository?")?
+            {
                 println!("Ignoring sync...");
                 return Ok(());
             }
@@ -235,11 +242,13 @@ pub fn sync(
             CONFIG_NAME,
             AMBIT_PATHS.repo.path.display()
         );
-        let repo_config_paths = get_repo_config_paths();
+        let repo_config_paths = get_repo_config_paths(use_any_repo_config);
         let mut repo_config = None;
         // Iterate through repo configuration files that were found.
         for path in repo_config_paths {
-            if prompt_confirm(format!("Repo config found: {}. Use?", path.display()).as_str())? {
+            if use_any_repo_config
+                || prompt_confirm(format!("Repo config found: {}. Use?", path.display()).as_str())?
+            {
                 // config.ambit file has been found in repo and user has accepted it.
                 repo_config = Some(AmbitPath::new(path, AmbitPathKind::File));
                 break;
