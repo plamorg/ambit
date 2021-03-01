@@ -354,6 +354,28 @@ fn sync_use_any_repo_config_found() {
 }
 
 #[test]
+fn sync_use_any_repo_config_found_if_required() {
+    let temp_dir = TempDir::new().unwrap();
+    let repo_path = temp_dir.path().join("repo");
+    AmbitTester::from_temp_dir(&temp_dir)
+        .with_repo_file("repo.txt")
+        .with_file_with_content(&repo_path.join("config.ambit"), "repo.txt => host.txt;")
+        // Combine flags --use-any-repo-config-found and --use-repo-config-if-required.
+        // This should mean that nothing has to be written to stdin.
+        .args(vec![
+            "sync",
+            "--use-any-repo-config-found",
+            "--use-repo-config-if-required",
+        ])
+        .assert()
+        .success();
+    assert!(is_symlinked(
+        temp_dir.path().join("host.txt"),
+        temp_dir.path().join("repo").join("repo.txt"),
+    ));
+}
+
+#[test]
 fn clean_after_sync() {
     let temp_dir = TempDir::new().unwrap();
     let host_path = temp_dir.path().join("host.txt");
