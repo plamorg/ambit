@@ -1,6 +1,6 @@
 # ambit
 
-[![Rust](https://github.com/plamorg/ambit/actions/workflows/rust.yml/badge.svg)](https://github.com/plamorg/ambit/actions/workflows/rust.yml)
+[![CICD](https://github.com/plamorg/ambit/actions/workflows/cicd.yml/badge.svg)](https://github.com/plamorg/ambit/actions/workflows/cicd.yml)
 
 Dotfile manager written in Rust.
 
@@ -9,10 +9,18 @@ Files can be easily synced and are managed through a custom configuration file.
 
 Features:
 
-*   Custom configuration syntax
+*   Custom configuration syntax tailored for dotfile management
 *   Git integration
 *   System-based alternative files
     *   By operating system and hostname
+
+## Installation
+
+Build the `ambit` binary from source:
+
+    $ git clone https://github.com/plamorg/ambit.git
+    $ cd ambit
+    $ cargo install --path .
 
 ## Getting Started
 
@@ -63,7 +71,7 @@ If a variable is not set, it will take up its default value as outlined:
 The purpose of the configuration file is to set the paths of the symlinks.
 A symlink is defined with two parts: an existing file relative to `AMBIT_REPO_PATH`, and its destination relative to the system's home directory.
 
-### Configuration examples
+### Configuration syntax examples
 
 #### Basic match
 
@@ -81,25 +89,38 @@ Symlink `${HOME}/.config/ambit/config.ambit -> ${AMBIT_REPO_PATH}/.config/ambit/
 
 #### Variant Expression
 
+Variant expressions, denoted with brackets (`[]`), are a shorthand way to set multiple paths.
+
 Symlink:
 
 *   `${HOME}/.config/bat/bat.conf -> ${AMBIT_REPO_PATH}/.config/bat/bat.conf`
 *   `${HOME}/.config/nvim/init.vim -> ${AMBIT_REPO_PATH}/.config/nvim/init.vim`
+*   `${HOME}/.config/kitty/kitty.conf -> ${AMBIT_REPO_PATH}/.config/kitty/kitty.conf`
+*   `${HOME}/.config/kitty/theme.conf -> ${AMBIT_REPO_PATH}/.config/kitty/theme.conf`
 
 <!---->
 
     .config/[
         bat/bat.conf,
-        nvim/init.vim
+        nvim/init.vim,
+        kitty/[kitty.conf, theme.conf]
     ];
 
 #### Match expressions
+
+Match expressions, denoted with braces (`{}`), allow to conditionally sync files based on a system's operating system and host.
 
 Conditionally symlink by os and host:
 
     {os(linux): .Xresources};
 
     {host(plamorg): .zshrc};
+
+    {
+        os(linux): .emacs,
+        os(macos): .config/nvim/init.vim,
+        default: .vimrc
+    };
 
 Combining conditionals:
 
@@ -110,14 +131,6 @@ Combining conditionals:
             default: bspwmrc,
         }
     } => .config/bspwm/bspwmrc;
-
-## Installation
-
-Build the `ambit` binary from source:
-
-    $ git clone git@github.com:plamorg/ambit.git
-    $ cd ambit
-    $ cargo install --path .
 
 ## Development
 
