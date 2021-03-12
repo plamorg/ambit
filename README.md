@@ -75,7 +75,7 @@ A symlink is defined with two parts: an existing file relative to `AMBIT_REPO_PA
 
 #### Basic match
 
-Symlink `${HOME}/host.txt -> ${AMBIT_REPO_PATH}/a/repo.txt`:
+Symlink `${HOME}/host.txt` to `${AMBIT_REPO_PATH}/a/repo.txt`:
 
     a/repo.txt => host.txt;
 
@@ -83,11 +83,11 @@ Symlink `${HOME}/host.txt -> ${AMBIT_REPO_PATH}/a/repo.txt`:
 
 If no `=>` operator is provided, it is assumed that the path given is both the `HOME` and `REPO` path.
 
-Symlink `${HOME}/.config/ambit/config.ambit -> ${AMBIT_REPO_PATH}/.config/ambit/config.ambit`:
+Symlink `${HOME}/.config/ambit/config.ambit` to `${AMBIT_REPO_PATH}/.config/ambit/config.ambit`:
 
     .config/ambit/config.ambit;
 
-#### Variant Expression
+#### Variant expressions
 
 Variant expressions, denoted with brackets (`[]`), are a shorthand way to set multiple paths.
 
@@ -95,10 +95,10 @@ For instance, the variant expression `[a, b, c]` would expand out to `a`, `b`, a
 
 Instead of manually writing out the paths, a variant expression can be used:
 
-*   `${HOME}/.config/bat/bat.conf -> ${AMBIT_REPO_PATH}/.config/bat/bat.conf`
-*   `${HOME}/.config/nvim/init.vim -> ${AMBIT_REPO_PATH}/.config/nvim/init.vim`
-*   `${HOME}/.config/kitty/kitty.conf -> ${AMBIT_REPO_PATH}/.config/kitty/kitty.conf`
-*   `${HOME}/.config/kitty/theme.conf -> ${AMBIT_REPO_PATH}/.config/kitty/theme.conf`
+*   `${HOME}/.config/bat/bat.conf` to `${AMBIT_REPO_PATH}/.config/bat/bat.conf`
+*   `${HOME}/.config/nvim/init.vim` to `${AMBIT_REPO_PATH}/.config/nvim/init.vim`
+*   `${HOME}/.config/kitty/kitty.conf` to `${AMBIT_REPO_PATH}/.config/kitty/kitty.conf`
+*   `${HOME}/.config/kitty/theme.conf` to `${AMBIT_REPO_PATH}/.config/kitty/theme.conf`
 
 <!---->
 
@@ -112,13 +112,26 @@ Instead of manually writing out the paths, a variant expression can be used:
 
 Match expressions, denoted with braces (`{}`), allow to conditionally sync files based on a system's operating system and host.
 
+The possible values of OS are:
+
+*   linux
+*   macos
+*   ios
+*   freebsd
+*   dragonfly
+*   netbsd
+*   openbsd
+*   solaris
+*   android
+*   windows
+
 Conditionally symlink by os and host:
 
     {os(linux): .Xresources};
 
     {host(plamorg): .zshrc};
 
-`default` can be used to specify a value if none of the other cases match correctly.
+`default` can be used to specify a value if none of the other cases match correctly:
 
     {
         os(linux): .emacs,
@@ -136,6 +149,20 @@ The following example would symbolically link `.config/bspwm/bspwmrc.bar` if the
             default: bspwmrc,
         }
     } => .config/bspwm/bspwmrc;
+
+Match expressions can also be used to exclude. For the following example, the entry would not be considered if the hostname was `eclipse`:
+
+    .config/nvim/{
+        host(hexagon): init
+        host(rpi): light
+    }.nvim;
+
+#### Escape special characters
+
+Paths that contain reserved characters can be escaped with a backslash (`\`).
+The following example represents a file in directory named `badly named[dir/}` called `config`:
+
+    badly\ named\[dir\/\}/config;
 
 ## Development
 
