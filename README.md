@@ -91,7 +91,9 @@ Symlink `${HOME}/.config/ambit/config.ambit -> ${AMBIT_REPO_PATH}/.config/ambit/
 
 Variant expressions, denoted with brackets (`[]`), are a shorthand way to set multiple paths.
 
-Symlink:
+For instance, the variant expression `[a, b, c]` would expand out to `a`, `b`, and `c`.
+
+Instead of manually writing out the paths, a variant expression can be used:
 
 *   `${HOME}/.config/bat/bat.conf -> ${AMBIT_REPO_PATH}/.config/bat/bat.conf`
 *   `${HOME}/.config/nvim/init.vim -> ${AMBIT_REPO_PATH}/.config/nvim/init.vim`
@@ -116,13 +118,16 @@ Conditionally symlink by os and host:
 
     {host(plamorg): .zshrc};
 
+`default` can be used to specify a value if none of the other cases match correctly.
+
     {
         os(linux): .emacs,
         os(macos): .config/nvim/init.vim,
         default: .vimrc
     };
 
-Combining conditionals:
+Combining conditionals allow to specify alternative files based on both os and host.
+The following example would symbolically link `.config/bspwm/bspwmrc.bar` if the os was `linux` **and** the hostname was `bar`:
 
     .config/bspwm/{os(linux):
         {
@@ -133,6 +138,8 @@ Combining conditionals:
     } => .config/bspwm/bspwmrc;
 
 ## Development
+
+The CI currently assures that `fmt`, `clippy` and `test` pass successfully.
 
 Building:
 
