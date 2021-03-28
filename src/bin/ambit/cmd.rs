@@ -6,7 +6,7 @@ use std::os::windows::fs::symlink_file as symlink;
 use std::{
     fs,
     io::{self, Write},
-    path::PathBuf,
+    path::{Path, PathBuf},
     process::Command,
 };
 
@@ -46,7 +46,7 @@ fn get_config_entries(config_path: &AmbitPath) -> AmbitResult<Vec<Entry>> {
 }
 
 // Return if link_name is symlinked to target (link_name -> target).
-fn is_symlinked(link_name: &PathBuf, target: &PathBuf) -> bool {
+fn is_symlinked(link_name: &Path, target: &Path) -> bool {
     fs::read_link(link_name)
         .map(|link_path| link_path == *target)
         .unwrap_or(false)

@@ -43,7 +43,7 @@ impl AmbitTester {
     }
 
     // Write content to a given path.
-    fn with_file_with_content(self, path: &PathBuf, content: &str) -> Self {
+    fn with_file_with_content(self, path: &Path, content: &str) -> Self {
         fs::create_dir_all(path.parent().unwrap()).unwrap();
         File::create(&path).unwrap();
         fs::write(&path, content).unwrap();
