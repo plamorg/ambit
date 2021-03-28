@@ -1,8 +1,12 @@
 [package]
 name = "ambit"
+description = "Dotfile manager written in Rust."
+repository = "https://github.com/plamorg/ambit"
+homepage = "https://github.com/plamorg/ambit"
 version = "0.1.0"
 authors = ["Edward Wibowo <wibow9770@gmail.com>", "Vir Chaudhury <virchau13@mail.hexular.net>"]
 edition = "2018"
+license = "GPL-3.0"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
