@@ -40,9 +40,18 @@ fn ensure_paths_exist(force: bool) -> AmbitResult<()> {
 // Fetch entries from config file and return as vector
 fn get_config_entries(config_path: &AmbitPath) -> AmbitResult<Vec<Entry>> {
     let content = config_path.as_string()?;
-    config::get_entries(content.chars().peekable())
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(AmbitError::Parse)
+    let config = config::get_entries(content.chars().peekable());
+    // Partition the config into entries and errors.
+    let (entries, errors): (Vec<_>, Vec<_>) = config.partition(Result::is_ok);
+    if errors.is_empty() {
+        Ok(entries.into_iter().map(Result::unwrap).collect())
+    } else {
+        // There is at least one error in the configuration.
+        // There is no need to return any entries; simply return all the errors received.
+        Err(AmbitError::Parse(
+            errors.into_iter().map(Result::unwrap_err).collect(),
+        ))
+    }
 }
 
 // Return if link_name is symlinked to target (link_name -> target).

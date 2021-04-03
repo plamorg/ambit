@@ -54,6 +54,7 @@ impl Token {
     }
 }
 
+#[derive(Debug)]
 pub struct Lexer<I: Iterator<Item = char>> {
     iter: Peekable<I>,
     line: usize,

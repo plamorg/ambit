@@ -40,7 +40,7 @@ impl From<ParseErrorType> for ParseError {
     }
 }
 
-pub type ParseResult<T> = std::result::Result<T, ParseError>;
+pub type ParseResult<T> = Result<T, ParseError>;
 
 pub fn get_entries<I: Iterator<Item = char>>(char_iter: Peekable<I>) -> Parser<Lexer<I>> {
     let lex = Lexer::new(char_iter);

@@ -77,7 +77,14 @@ impl<I: Iterator<Item = Token>> Iterator for Parser<I> {
                 let new = Entry::parse(&mut self.iter);
                 match new {
                     Err(mut e) => {
-                        e.tok = self.iter.peek().cloned();
+                        e.tok = self.iter.next();
+                        while Entry::parse(&mut self.iter).is_err() {
+                            // If an error has been encountered, continue iterating until a non-error entry is found.
+                            // Contiguous errors are a by-product of the initial error and shouldn't be reported.
+                            if self.iter.next().is_none() {
+                                break;
+                            }
+                        }
                         Err(e)
                     }
                     Ok(p) => Ok(p),
@@ -305,12 +312,11 @@ mod tests {
             Ok(parsed) => assert_eq!(parsed, ast),
         }
     }
-    fn fail(toks: &[Token], err: ParseError) {
+    fn fail(toks: &[Token], errors: Vec<ParseError>) {
+        // Take a vector of errors to check for multiple errors if needed.
         let iter = toks.iter().cloned().peekable();
-        let res = Parser::new(iter)
-            .collect::<ParseResult<Vec<_>>>()
-            .unwrap_err();
-        assert_eq!(err, res);
+        let res: Vec<_> = Parser::new(iter).filter_map(|e| e.err()).collect();
+        assert_eq!(errors, res);
     }
 
     #[test]
@@ -533,11 +539,75 @@ mod tests {
     fn semicolon_error() {
         fail(
             &toklist!["a"],
-            ParseError {
+            vec![ParseError {
                 tok: None, // `None` means it failed at EOF
                 ty: ParseErrorType::Expected(&[TokType::Semicolon]),
-            },
+            }],
         );
     }
+
+    #[test]
+    fn multiple_errors() {
+        // Here we are testing that multiple errors can be reported.
+        // Only one error should be reported per invalid entry.
+        // This should be done while still being able to parse valid entries.
+        let toks = &toklist![
+            // This first entry should be invalid.
+            ".config/bspwm/",
+            TokType::LBrace,
+            "os",
+            TokType::LParen,
+            "linux",
+            TokType::RParen,
+            // Missing colon...
+            TokType::LBrace,
+            "host",
+            TokType::LParen,
+            "claby2",
+            TokType::Colon,
+            "a",
+            TokType::Comma,
+            "default",
+            TokType::Colon,
+            "b",
+            TokType::Comma,
+            TokType::RBrace,
+            TokType::RBrace,
+            TokType::MapsTo,
+            "c",
+            TokType::Semicolon,
+            // The following entry should be valid.
+            "yes",
+            TokType::Semicolon,
+            // The following entry should be invalid.
+            "file" // Missing semicolon...
+        ];
+        let iter = toks.iter().cloned().peekable();
+        let (entries, errors): (Vec<_>, Vec<_>) = Parser::new(iter).partition(Result::is_ok);
+        let entries: Vec<_> = entries.into_iter().map(Result::unwrap).collect();
+        let errors: Vec<_> = errors.into_iter().map(Result::unwrap_err).collect();
+        // Check if the 'yes' entry passed to ensure that it isn't consumed accidentally.
+        assert_eq!(
+            entries,
+            vec![Entry {
+                left: Spec::from("yes"),
+                right: None,
+            },]
+        );
+        assert_eq!(
+            errors,
+            vec![
+                ParseError {
+                    tok: Some(Token::new(TokType::LBrace, 0)),
+                    ty: ParseErrorType::Expected(&[TokType::Colon]),
+                },
+                ParseError {
+                    tok: None,
+                    ty: ParseErrorType::Expected(&[TokType::Semicolon]),
+                }
+            ]
+        );
+    }
+
     // TODO: add more tests
 }

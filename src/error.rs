@@ -16,7 +16,7 @@ pub enum AmbitError {
     // TODO: As of now, a single ParseError is returned from config::get_entries
     //       Future changes may result in a Vec<ParseError> being returned.
     //       This should be taken care of.
-    Parse(config::ParseError),
+    Parse(Vec<config::ParseError>),
     WalkDir(walkdir::Error),
     // File error is encountered on failed file open operation
     // Provides additional path information
@@ -46,7 +46,12 @@ impl Display for AmbitError {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         match self {
             AmbitError::Io(ref e) => e.fmt(f),
-            AmbitError::Parse(ref e) => e.fmt(f),
+            AmbitError::Parse(errors) => {
+                for e in errors.iter() {
+                    e.fmt(f)?;
+                }
+                Ok(())
+            }
             AmbitError::WalkDir(ref e) => e.fmt(f),
             AmbitError::File { path, .. } => {
                 f.write_fmt(format_args!("File error with `{}`", path.display()))
