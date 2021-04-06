@@ -64,7 +64,7 @@ pub struct Parser<I: Iterator<Item = Token>> {
 }
 impl<I: Iterator<Item = Token>> Parser<I> {
     pub fn new(iter: Peekable<I>) -> Self {
-        Parser { iter }
+        Self { iter }
     }
 }
 impl<I: Iterator<Item = Token>> Iterator for Parser<I> {
@@ -94,13 +94,13 @@ impl SimpleParse for Entry {
         let mut right = None;
         if eat(iter, &TokType::MapsTo) {
             let right_val = Spec::parse(iter)?;
-            let left_nr = left.nr_of_options().ok_or(ParseError {
-                tok: None,
-                ty: ParseErrorType::Custom("Too many options on left hand side"),
+            let left_nr = left.nr_of_options().ok_or_else(|| {
+                ParseError::from(ParseErrorType::Custom("Too many options on left hand side"))
             })?;
-            let right_nr = right_val.nr_of_options().ok_or(ParseError {
-                tok: None,
-                ty: ParseErrorType::Custom("Too many options on right hand side"),
+            let right_nr = right_val.nr_of_options().ok_or_else(|| {
+                ParseError::from(ParseErrorType::Custom(
+                    "Too many options on right hand side",
+                ))
             })?;
             if left_nr != right_nr {
                 return Err(ParseError::from(ParseErrorType::Custom(
@@ -110,7 +110,7 @@ impl SimpleParse for Entry {
             right = Some(right_val);
         }
         expect(iter, &[TokType::Semicolon])?;
-        Ok(Entry { left, right })
+        Ok(Self { left, right })
     }
 }
 
@@ -212,7 +212,7 @@ impl SimpleParse for MatchExpr {
                 Ok((expr, spec))
             }
         }
-        Ok(MatchExpr {
+        Ok(Self {
             cases: CommaList::parse(iter, &TokType::RBrace)?.list,
         })
     }
@@ -533,10 +533,8 @@ mod tests {
     fn semicolon_error() {
         fail(
             &toklist!["a"],
-            ParseError {
-                tok: None, // `None` means it failed at EOF
-                ty: ParseErrorType::Expected(&[TokType::Semicolon]),
-            },
+            // Error occurs at EOF.
+            ParseError::from(ParseErrorType::Expected(&[TokType::Semicolon])),
         );
     }
     // TODO: add more tests

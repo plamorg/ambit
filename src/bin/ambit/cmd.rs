@@ -10,10 +10,11 @@ use std::{
     process::Command,
 };
 
+use patmatch::{MatchOptions, Pattern};
 use walkdir::WalkDir;
 
 use ambit::{
-    config::{self, Entry},
+    config::{self, ast::Spec, Entry},
     error::{AmbitError, AmbitResult},
 };
 
@@ -52,24 +53,122 @@ fn is_symlinked(link_name: &Path, target: &Path) -> bool {
         .unwrap_or(false)
 }
 
+fn get_paths_from_spec(spec: &Spec, start_path: PathBuf) -> AmbitResult<Vec<PathBuf>> {
+    let mut paths: Vec<PathBuf> = Vec::new();
+    let contains_pattern_char = |s: &str| -> bool { s.contains('*') || s.contains('?') };
+    for entry in spec.into_iter() {
+        if contains_pattern_char(&entry) {
+            fn get_matches(
+                ancestor_path: &Path,
+                expected_path_kind: &AmbitPathKind,
+                does_match: impl Fn(&str) -> bool,
+            ) -> AmbitResult<Vec<PathBuf>> {
+                let mut matches = Vec::new();
+                // Iterate through all entries in ancestor_path.
+                for path in fs::read_dir(ancestor_path)? {
+                    let path = path?.path();
+                    // Validify the current path.
+                    if let Some(file_name) = path.file_name() {
+                        if match expected_path_kind {
+                            AmbitPathKind::File => path.is_file(),
+                            AmbitPathKind::Directory => path.is_dir(),
+                        } && does_match(&file_name.to_string_lossy().to_string())
+                        {
+                            matches.push(path);
+                        }
+                    }
+                }
+                Ok(matches)
+            }
+            // The only valid path at the start is the starting path.
+            let mut valid_paths: Vec<PathBuf> = vec![start_path.clone()];
+            let components: Vec<String> = Path::new(&entry)
+                .components()
+                .map(|comp| comp.as_os_str().to_string_lossy().to_string())
+                .collect();
+            for (i, component) in components.iter().enumerate() {
+                let mut new_valid_paths: Vec<PathBuf> = Vec::new();
+                let expected_path_kind = if i < components.len() - 1 {
+                    // There are still more components to go, expect a directory.
+                    AmbitPathKind::Directory
+                } else {
+                    // No more components, expect a file.
+                    AmbitPathKind::File
+                };
+                let pattern = Pattern::compile(
+                    &component,
+                    MatchOptions::WILDCARDS | MatchOptions::UNKNOWN_CHARS,
+                );
+                for path in &valid_paths {
+                    new_valid_paths.append(&mut get_matches(
+                        &path,
+                        &expected_path_kind,
+                        |name: &str| -> bool { pattern.matches(name) },
+                    )?);
+                }
+                valid_paths = new_valid_paths;
+            }
+            // Strip prefix from all paths.
+            valid_paths = valid_paths
+                .iter()
+                .map(|path| -> AmbitResult<PathBuf> {
+                    Ok(path.strip_prefix(&start_path)?.to_path_buf())
+                })
+                .collect::<AmbitResult<Vec<PathBuf>>>()?;
+            paths.append(&mut valid_paths);
+        } else {
+            paths.push(PathBuf::from(&entry));
+        }
+    }
+    Ok(paths)
+}
+
 // Return iterator over path pairs in the form of `(repo_file, host_file)` from given entry.
-fn get_ambit_paths_from_entry<'a>(
-    entry: &'a Entry,
-) -> Box<dyn Iterator<Item = (AmbitPath, AmbitPath)> + 'a> {
-    Box::new(
-        entry
-            .left
-            .into_iter()
-            // If entry.right is None, entry.left is considered to be both repo and host path.
-            .zip(entry.right.as_ref().unwrap_or(&entry.left).into_iter())
-            .map(|(repo_path, host_path)| {
-                // Wrap the given paths as AmbitPath.
-                (
-                    AmbitPath::new(AMBIT_PATHS.repo.path.join(repo_path), AmbitPathKind::File),
-                    AmbitPath::new(AMBIT_PATHS.home.path.join(host_path), AmbitPathKind::File),
-                )
-            }),
-    )
+fn get_ambit_paths_from_entry(entry: &Entry) -> AmbitResult<Vec<(AmbitPath, AmbitPath)>> {
+    let (left_paths, right_paths): (Vec<PathBuf>, Option<Vec<PathBuf>>) =
+        if let Some(entry_right) = &entry.right {
+            (
+                get_paths_from_spec(&entry.left, PathBuf::from(AMBIT_PATHS.repo.to_str()?))?,
+                Some(get_paths_from_spec(
+                    &entry_right,
+                    PathBuf::from(AMBIT_PATHS.home.to_str()?),
+                )?),
+            )
+        } else {
+            // The right entry does not exist. Treat the left entry as both the repo and host paths.
+            (
+                get_paths_from_spec(&entry.left, PathBuf::from(AMBIT_PATHS.home.to_str()?))?,
+                None,
+            )
+        };
+    // The number of left and right paths may be different due to pattern matching.
+    // An error is thrown if they have different sizes.
+    if let Some(right_paths) = &right_paths {
+        if left_paths.len() != right_paths.len() {
+            // Format the vector of PathBuf as a string delimited by a newline.
+            let format_paths = |paths: &Vec<PathBuf>| {
+                paths
+                    .iter()
+                    .map(|path| path.as_path().display().to_string())
+                    .collect::<Vec<String>>()
+                    .join("\n")
+            };
+            return Err(AmbitError::Other(format!(
+                "Entry has imbalanced left and right side due to pattern matching\nAttempted to sync:\n{}\nWITH:\n{}",
+                format_paths(&left_paths), format_paths(right_paths),
+            )));
+        }
+    }
+    Ok(left_paths
+        .iter()
+        .zip(right_paths.unwrap_or_else(|| left_paths.clone()).iter())
+        .map(|(repo_path, host_path)| {
+            (
+                AmbitPath::new(AMBIT_PATHS.repo.path.join(repo_path), AmbitPathKind::File),
+                AmbitPath::new(AMBIT_PATHS.home.path.join(host_path), AmbitPathKind::File),
+            )
+        })
+        .collect())
 }
 
 // Recursively search dotfile repository for config path.
@@ -262,7 +361,7 @@ pub fn sync(
         get_config_entries(&AMBIT_PATHS.config)?
     };
     for entry in entries {
-        let paths = get_ambit_paths_from_entry(&entry);
+        let paths = get_ambit_paths_from_entry(&entry)?;
         for (repo_file, host_file) in paths {
             link(repo_file, host_file)?;
         }
@@ -283,7 +382,7 @@ pub fn clean() -> AmbitResult<()> {
     let mut total_syncs: usize = 0;
     let mut deletions: usize = 0;
     for entry in entries {
-        let paths = get_ambit_paths_from_entry(&entry);
+        let paths = get_ambit_paths_from_entry(&entry)?;
         for (repo_file, host_file) in paths {
             if is_symlinked(&host_file.path, &repo_file.path) {
                 host_file.remove()?;
@@ -315,4 +414,68 @@ pub fn git(arguments: Vec<&str>) -> AmbitResult<()> {
     io::stdout().write_all(&output.stdout)?;
     io::stdout().write_all(&output.stderr)?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::get_paths_from_spec;
+    use ambit::config::ast::Spec;
+    use std::{
+        collections::HashSet,
+        fs::{self, File},
+    };
+
+    fn test_spec(spec_str: &str, existing_paths: &[&str], expected_paths: &[&str]) {
+        let spec = Spec::from(spec_str);
+        let dir = tempfile::tempdir().unwrap();
+        // Create paths.
+        for path in existing_paths {
+            let path = dir.path().join(path);
+            if let Some(parent) = path.parent() {
+                fs::create_dir_all(parent).unwrap();
+            }
+            File::create(path).unwrap();
+        }
+        let paths = get_paths_from_spec(&spec, dir.into_path()).unwrap();
+        // Use a HashSet as order of paths should not matter.
+        let paths: HashSet<&str> = paths.iter().map(|path| path.to_str().unwrap()).collect();
+        assert_eq!(paths, expected_paths.iter().copied().collect());
+    }
+
+    #[test]
+    fn get_paths_from_spec_without_pattern() {
+        test_spec("a/b/c", &["c/b/a", "a/b/c"], &["a/b/c"]);
+    }
+
+    #[test]
+    fn get_paths_from_spec_adjacent_wildcard() {
+        test_spec(
+            ".config/*/*",
+            &[
+                ".config/foo",
+                ".config/bar",
+                ".config/hello",
+                ".config/nvim/init.vim",
+                ".config/ambit/config.ambit",
+                ".config/ambit/repo/.vimrc",
+            ],
+            &[".config/nvim/init.vim", ".config/ambit/config.ambit"],
+        );
+    }
+
+    #[test]
+    fn get_paths_from_spec_with_unknown_char() {
+        test_spec(
+            "Pictures/*.???",
+            &[
+                "Pictures/foo.jpg",
+                "Pictures/bar.png",
+                "Pictures/hello.svg",
+                // The following 2 should be ignored.
+                "Pictures/world.webp",
+                "Pictures/image.jpeg",
+            ],
+            &["Pictures/foo.jpg", "Pictures/bar.png", "Pictures/hello.svg"],
+        );
+    }
 }
