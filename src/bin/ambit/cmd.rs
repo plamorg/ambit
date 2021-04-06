@@ -491,6 +491,7 @@ mod tests {
         );
     }
 
+    #[cfg(not(target_os = "windows"))]
     #[test]
     fn get_paths_from_spec_with_escaped_char() {
         test_spec("x\\*y", &["x*y", "xay", "xaay"], &[PathBuf::from("x*y")]);
