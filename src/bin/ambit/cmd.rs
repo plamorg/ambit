@@ -423,28 +423,33 @@ mod tests {
     use std::{
         collections::HashSet,
         fs::{self, File},
+        path::PathBuf,
     };
 
-    fn test_spec(spec_str: &str, existing_paths: &[&str], expected_paths: &[&str]) {
+    fn test_spec(spec_str: &str, existing_paths: &[&str], expected_paths: &[PathBuf]) {
         let spec = Spec::from(spec_str);
-        let dir = tempfile::tempdir().unwrap();
+        let dir_path = tempfile::tempdir().unwrap().into_path();
         // Create paths.
         for path in existing_paths {
-            let path = dir.path().join(path);
+            let path = dir_path.join(path);
             if let Some(parent) = path.parent() {
                 fs::create_dir_all(parent).unwrap();
             }
             File::create(path).unwrap();
         }
-        let paths = get_paths_from_spec(&spec, dir.into_path()).unwrap();
+        let paths = get_paths_from_spec(&spec, dir_path).unwrap();
+        let paths: HashSet<&PathBuf> = paths.iter().collect();
         // Use a HashSet as order of paths should not matter.
-        let paths: HashSet<&str> = paths.iter().map(|path| path.to_str().unwrap()).collect();
-        assert_eq!(paths, expected_paths.iter().copied().collect());
+        assert_eq!(paths, expected_paths.iter().collect::<HashSet<&PathBuf>>());
     }
 
     #[test]
     fn get_paths_from_spec_without_pattern() {
-        test_spec("a/b/c", &["c/b/a", "a/b/c"], &["a/b/c"]);
+        test_spec(
+            "a/b/c",
+            &["c/b/a", "a/b/c"],
+            &[PathBuf::from("a").join("b").join("c")],
+        );
     }
 
     #[test]
@@ -459,7 +464,10 @@ mod tests {
                 ".config/ambit/config.ambit",
                 ".config/ambit/repo/.vimrc",
             ],
-            &[".config/nvim/init.vim", ".config/ambit/config.ambit"],
+            &[
+                PathBuf::from(".config").join("nvim").join("init.vim"),
+                PathBuf::from(".config").join("ambit").join("config.ambit"),
+            ],
         );
     }
 
@@ -475,7 +483,16 @@ mod tests {
                 "Pictures/world.webp",
                 "Pictures/image.jpeg",
             ],
-            &["Pictures/foo.jpg", "Pictures/bar.png", "Pictures/hello.svg"],
+            &[
+                PathBuf::from("Pictures").join("foo.jpg"),
+                PathBuf::from("Pictures").join("bar.png"),
+                PathBuf::from("Pictures").join("hello.svg"),
+            ],
         );
+    }
+
+    #[test]
+    fn get_paths_from_spec_with_escaped_char() {
+        test_spec("x\\*y", &["x*y", "xay", "xaay"], &[PathBuf::from("x*y")]);
     }
 }
