@@ -53,7 +53,7 @@ fn is_symlinked(link_name: &Path, target: &Path) -> bool {
         .is_ok()
 }
 
-// Retrieves paths from a spec and expands pattern matching characters relative to given start_path.
+// Return a vector of PathBufs that match a pattern relative to the given start_path.
 fn get_paths_from_spec(spec: &Spec, start_path: PathBuf) -> AmbitResult<Vec<PathBuf>> {
     let mut paths: Vec<PathBuf> = Vec::new();
     for entry in spec.into_iter() {
@@ -111,25 +111,23 @@ fn get_paths_from_spec(spec: &Spec, start_path: PathBuf) -> AmbitResult<Vec<Path
     Ok(paths)
 }
 
-// Return iterator over path pairs in the form of `(repo_file, host_file)` from given entry.
+// Return vector over path pairs in the form of `(repo_file, host_file)` from given entry.
 fn get_ambit_paths_from_entry(entry: &Entry) -> AmbitResult<Vec<(AmbitPath, AmbitPath)>> {
     let left_entry_start = if entry.right.is_some() {
         PathBuf::from(AMBIT_PATHS.repo.to_str()?)
     } else {
         PathBuf::from(AMBIT_PATHS.home.to_str()?)
     };
-    let (left_paths, right_paths): (Vec<PathBuf>, Option<Vec<PathBuf>>) =
-        (get_paths_from_spec(&entry.left, left_entry_start)?, {
-            if let Some(entry_right) = &entry.right {
-                Some(get_paths_from_spec(
-                    &entry_right,
-                    PathBuf::from(AMBIT_PATHS.home.to_str()?),
-                )?)
-            } else {
-                // The right entry does not exist. Treat the left entry as both the repo and host paths.
-                None
-            }
-        });
+    let left_paths = get_paths_from_spec(&entry.left, left_entry_start)?;
+    let right_paths = if let Some(entry_right) = &entry.right {
+        Some(get_paths_from_spec(
+            &entry_right,
+            PathBuf::from(AMBIT_PATHS.home.to_str()?),
+        )?)
+    } else {
+        // The right entry does not exist. Treat the left entry as both the repo and host paths.
+        None
+    };
     // The number of left and right paths may be different due to pattern matching.
     // An error is thrown if they have different sizes.
     if let Some(right_paths) = &right_paths {
@@ -430,6 +428,8 @@ mod tests {
             File::create(path).unwrap();
         }
         let paths = get_paths_from_spec(&spec, dir_path).unwrap();
+        // Assert that there are no duplicates as they would be removed when collected into a HashSet.
+        assert_eq!(paths.len(), expected_paths.len());
         let paths: HashSet<&PathBuf> = paths.iter().collect();
         // Use a HashSet as order of paths should not matter.
         assert_eq!(paths, expected_paths.iter().collect::<HashSet<&PathBuf>>());

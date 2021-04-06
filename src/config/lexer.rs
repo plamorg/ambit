@@ -87,7 +87,6 @@ fn process_string<I: Iterator<Item = char>>(iter: &mut Peekable<I>, start: char)
                 // Push the character if it exists.
                 ret.push(c);
             }
-            // Unconditionally advance the iterator.
             iter.next();
         } else if !is_ending_char(*peek_char) {
             ret.push(iter.next().unwrap());
