@@ -50,7 +50,7 @@ fn get_config_entries(config_path: &AmbitPath) -> AmbitResult<Vec<Entry>> {
 fn is_symlinked(link_name: &Path, target: &Path) -> bool {
     fs::read_link(link_name)
         .map(|link_path| link_path == *target)
-        .is_ok()
+        .unwrap_or(false)
 }
 
 // Return a vector of PathBufs that match a pattern relative to the given start_path.
@@ -65,9 +65,9 @@ fn get_paths_from_spec(spec: &Spec, start_path: PathBuf) -> AmbitResult<Vec<Path
             // The only valid path at the start is the starting path.
             // This will be replaced at every iteration/depth.
             let mut valid_paths: Vec<PathBuf> = vec![start_path.clone()];
-            let components: Vec<String> = Path::new(&entry)
+            let components: Vec<_> = Path::new(&entry)
                 .components()
-                .map(|comp| comp.as_os_str().to_string_lossy().to_string())
+                .map(|comp| comp.as_os_str().to_string_lossy())
                 .collect();
             // To find matching files and directories, an entry as part of the spec is split into components.
             // For each component, a pattern is compiled and a vector of paths that match this pattern is found.
@@ -93,7 +93,7 @@ fn get_paths_from_spec(spec: &Spec, start_path: PathBuf) -> AmbitResult<Vec<Path
                             if match expected_path_kind {
                                 AmbitPathKind::File => path.is_file(),
                                 AmbitPathKind::Directory => path.is_dir(),
-                            } && pattern.matches(&file_name.to_string_lossy().to_string())
+                            } && pattern.matches(&file_name.to_string_lossy())
                             {
                                 new_valid_paths.push(path);
                             }
