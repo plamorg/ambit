@@ -2,7 +2,7 @@ use std::{
     error::Error,
     fmt::{self, Display, Formatter},
     io,
-    path::PathBuf,
+    path::{self, PathBuf},
     process,
 };
 
@@ -18,6 +18,7 @@ pub enum AmbitError {
     //       This should be taken care of.
     Parse(config::ParseError),
     WalkDir(walkdir::Error),
+    StripPrefix(path::StripPrefixError),
     // File error is encountered on failed file open operation
     // Provides additional path information
     File {
@@ -48,6 +49,7 @@ impl Display for AmbitError {
             AmbitError::Io(ref e) => e.fmt(f),
             AmbitError::Parse(ref e) => e.fmt(f),
             AmbitError::WalkDir(ref e) => e.fmt(f),
+            AmbitError::StripPrefix(ref e) => e.fmt(f),
             AmbitError::File { path, .. } => {
                 f.write_fmt(format_args!("File error with `{}`", path.display()))
             }
@@ -79,6 +81,12 @@ impl From<io::Error> for AmbitError {
 impl From<walkdir::Error> for AmbitError {
     fn from(err: walkdir::Error) -> AmbitError {
         AmbitError::WalkDir(err)
+    }
+}
+
+impl From<path::StripPrefixError> for AmbitError {
+    fn from(err: path::StripPrefixError) -> AmbitError {
+        AmbitError::StripPrefix(err)
     }
 }
 

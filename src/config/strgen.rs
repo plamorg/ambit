@@ -87,7 +87,7 @@ impl<'a> IntoIterator for &'a Spec {
     type Item = String;
     type IntoIter = SpecStrIter<'a>;
     fn into_iter(self) -> Self::IntoIter {
-        SpecStrIter {
+        Self::IntoIter {
             iter: SpecIter::new(self),
         }
     }
@@ -109,7 +109,7 @@ struct SpecIter<'a> {
 }
 impl<'a> SpecIter<'a> {
     pub fn new(spec: &'a Spec) -> Self {
-        let mut ret = SpecIter {
+        let mut ret = Self {
             spec,
             curr_expr: None,
             expr_iter: None,

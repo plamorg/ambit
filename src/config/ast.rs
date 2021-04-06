@@ -37,17 +37,9 @@ impl Spec {
         }
     }
 }
-impl From<String> for Spec {
-    fn from(s: String) -> Self {
-        Spec {
-            string: Some(s),
-            spectype: SpecType::None,
-        }
-    }
-}
 impl From<&str> for Spec {
     fn from(s: &str) -> Self {
-        Spec {
+        Self {
             string: Some(s.to_owned()),
             spectype: SpecType::None,
         }
@@ -55,7 +47,7 @@ impl From<&str> for Spec {
 }
 impl From<SpecType> for Spec {
     fn from(t: SpecType) -> Self {
-        Spec {
+        Self {
             string: None,
             spectype: t,
         }

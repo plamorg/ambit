@@ -65,30 +65,41 @@ impl<I: Iterator<Item = char>> Lexer<I> {
     }
 }
 
+fn process_string<I: Iterator<Item = char>>(iter: &mut Peekable<I>, start: char) -> String {
+    let is_ending_char = |c: char| -> bool {
+        c.is_ascii_whitespace()
+            || ['(', ')', '{', '}', '[', ']', ',', ';', ':', '=']
+                .iter()
+                .any(|e| *e == c)
+    };
+    let mut ret = start.to_string();
+    while let Some(peek_char) = iter.peek() {
+        if peek_char == &'\\' {
+            iter.next();
+            let next_char = iter.peek().cloned();
+            match next_char {
+                Some('*') | Some('?') | None => {
+                    ret.push('\\');
+                }
+                _ => {}
+            }
+            if let Some(c) = next_char {
+                // Push the character if it exists.
+                ret.push(c);
+            }
+            iter.next();
+        } else if !is_ending_char(*peek_char) {
+            ret.push(iter.next().unwrap());
+        } else {
+            break;
+        }
+    }
+    ret
+}
+
 impl<I: Iterator<Item = char>> Iterator for Lexer<I> {
     type Item = Token;
     fn next(&mut self) -> Option<Self::Item> {
-        fn proc_str<I: Iterator<Item = char>>(iter: &mut Peekable<I>, start: char) -> String {
-            fn is_ending_char(c: char) -> bool {
-                c.is_ascii_whitespace()
-                    || ['(', ')', '{', '}', '[', ']', ',', ';', ':', '=']
-                        .iter()
-                        .any(|e| *e == c)
-            }
-            let mut ret = start.to_string();
-            loop {
-                if iter.peek().map(|&c| c == '\\').unwrap_or(false) {
-                    iter.next();
-                    ret.push(iter.next().unwrap_or('\\'));
-                } else if iter.peek().map(|&c| !is_ending_char(c)).unwrap_or(false) {
-                    ret.push(iter.next().unwrap());
-                } else {
-                    break;
-                }
-            }
-            ret
-        }
-
         macro_rules! new_tok {
             ($t:ident) => {
                 Token::new(TokType::$t, self.line)
@@ -110,15 +121,23 @@ impl<I: Iterator<Item = char>> Iterator for Lexer<I> {
                     ';' => return Some(new_tok!(Semicolon)),
                     ':' => return Some(new_tok!(Colon)),
                     '=' => {
-                        if self.iter.peek().map(|x| *x == '>').unwrap_or(false) {
+                        if self.iter.peek() == Some(&'>') {
                             self.iter.next();
                             return Some(new_tok!(MapsTo));
                         } else {
-                            return Some(Token::string(proc_str(&mut self.iter, '='), self.line));
+                            return Some(Token::string(
+                                process_string(&mut self.iter, '='),
+                                self.line,
+                            ));
                         }
                     }
                     ' ' | '\t' | '\r' => {}
-                    _ => return Some(Token::string(proc_str(&mut self.iter, chr), self.line)),
+                    _ => {
+                        return Some(Token::string(
+                            process_string(&mut self.iter, chr),
+                            self.line,
+                        ))
+                    }
                 },
             }
         }
@@ -150,8 +169,16 @@ mod tests {
             Token::new(TokType::$t, $l)
         };
         ($s:tt, $l:literal) => {
-            Token::string($s.to_string(), $l)
+            Token::string($s.to_owned(), $l)
         };
+    }
+
+    #[test]
+    fn ignore_pattern_chars_in_processed_string() {
+        // '*' and '?' are pattern chars. They should be ignored if the user tries to escape them.
+        // These characters should be handled later with patmatch.
+        let proc_str = process_string(&mut "\\[\\]\\*\\?".to_owned().chars().peekable(), '[');
+        assert_eq!(proc_str, "[[]\\*\\?");
     }
 
     #[test]
