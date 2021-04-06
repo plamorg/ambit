@@ -533,7 +533,7 @@ mod tests {
     fn semicolon_error() {
         fail(
             &toklist!["a"],
-            // Error occurs at EOF.
+            // The error occurs at EOF.
             ParseError::from(ParseErrorType::Expected(&[TokType::Semicolon])),
         );
     }

@@ -46,9 +46,9 @@ impl Token {
     pub fn new(toktype: TokType, line: usize) -> Self {
         Self { toktype, line }
     }
-    pub fn string(s: &str, line: usize) -> Self {
+    pub fn string(s: String, line: usize) -> Self {
         Self {
-            toktype: TokType::Str(s.to_owned()),
+            toktype: TokType::Str(s),
             line,
         }
     }
@@ -65,7 +65,7 @@ impl<I: Iterator<Item = char>> Lexer<I> {
     }
 }
 
-fn get_processed_string<I: Iterator<Item = char>>(iter: &mut Peekable<I>, start: char) -> String {
+fn process_string<I: Iterator<Item = char>>(iter: &mut Peekable<I>, start: char) -> String {
     let is_ending_char = |c: char| -> bool {
         c.is_ascii_whitespace()
             || ['(', ')', '{', '}', '[', ']', ',', ';', ':', '=']
@@ -73,8 +73,8 @@ fn get_processed_string<I: Iterator<Item = char>>(iter: &mut Peekable<I>, start:
                 .any(|e| *e == c)
     };
     let mut ret = start.to_string();
-    loop {
-        if iter.peek().map(|&c| c == '\\').unwrap_or(false) {
+    while let Some(peek_char) = iter.peek() {
+        if peek_char == &'\\' {
             iter.next();
             let next_char = iter.peek().cloned();
             match next_char {
@@ -89,7 +89,7 @@ fn get_processed_string<I: Iterator<Item = char>>(iter: &mut Peekable<I>, start:
             }
             // Unconditionally advance the iterator.
             iter.next();
-        } else if iter.peek().map(|&c| !is_ending_char(c)).unwrap_or(false) {
+        } else if !is_ending_char(*peek_char) {
             ret.push(iter.next().unwrap());
         } else {
             break;
@@ -122,12 +122,12 @@ impl<I: Iterator<Item = char>> Iterator for Lexer<I> {
                     ';' => return Some(new_tok!(Semicolon)),
                     ':' => return Some(new_tok!(Colon)),
                     '=' => {
-                        if self.iter.peek().map(|x| *x == '>').unwrap_or(false) {
+                        if self.iter.peek() == Some(&'>') {
                             self.iter.next();
                             return Some(new_tok!(MapsTo));
                         } else {
                             return Some(Token::string(
-                                &get_processed_string(&mut self.iter, '='),
+                                process_string(&mut self.iter, '='),
                                 self.line,
                             ));
                         }
@@ -135,7 +135,7 @@ impl<I: Iterator<Item = char>> Iterator for Lexer<I> {
                     ' ' | '\t' | '\r' => {}
                     _ => {
                         return Some(Token::string(
-                            &get_processed_string(&mut self.iter, chr),
+                            process_string(&mut self.iter, chr),
                             self.line,
                         ))
                     }
@@ -170,7 +170,7 @@ mod tests {
             Token::new(TokType::$t, $l)
         };
         ($s:tt, $l:literal) => {
-            Token::string($s, $l)
+            Token::string($s.to_owned(), $l)
         };
     }
 
@@ -178,7 +178,7 @@ mod tests {
     fn ignore_pattern_chars_in_processed_string() {
         // '*' and '?' are pattern chars. They should be ignored if the user tries to escape them.
         // These characters should be handled later with patmatch.
-        let proc_str = get_processed_string(&mut "\\[\\]\\*\\?".to_owned().chars().peekable(), '[');
+        let proc_str = process_string(&mut "\\[\\]\\*\\?".to_owned().chars().peekable(), '[');
         assert_eq!(proc_str, "[[]\\*\\?");
     }
 
