@@ -77,14 +77,29 @@ pub fn check() -> AmbitResult<()> {
 pub fn git(arguments: Vec<&str>) -> AmbitResult<()> {
     // The path to repository (git-dir) and the working tree (work-tree) is
     // passed to ensure that git commands are run from the dotfile repository
-    let output = Command::new("git")
-        .args(&[
-            ["--git-dir=", AMBIT_PATHS.git.to_str()?].concat(),
-            ["--work-tree=", AMBIT_PATHS.repo.to_str()?].concat(),
-        ])
-        .args(arguments)
-        .output()?;
-    io::stdout().write_all(&output.stdout)?;
-    io::stdout().write_all(&output.stderr)?;
-    Ok(())
+    let mut command = Command::new("git");
+    command.args(&[
+        ["--git-dir=", AMBIT_PATHS.git.to_str()?].concat(),
+        ["--work-tree=", AMBIT_PATHS.repo.to_str()?].concat(),
+    ]);
+    command.args(arguments);
+    // Conditional compilation so that this still compiles on Windows.
+    #[cfg(unix)]
+    fn exec_git_cmd(mut command: Command) -> AmbitResult<()> {
+        use std::os::unix::process::CommandExt;
+        // Try to replace this process with the `git` process.
+        // This is to allow stuff like terminal colors.
+        // We just want `ambit git` to act like `cd ~/.config/ambit/repo; git`.
+        // If the `.exec()` method returns, it failed to execute, so it's automatically an error.
+        Err(AmbitError::Io(command.exec()))
+    }
+    #[cfg(not(unix))]
+    fn exec_git_cmd(mut command: Command) -> AmbitResult<()> {
+        // Not easy to do this on other systems, just use defaults
+        let output = command.output()?;
+        io::stdout().write_all(&output.stdout)?;
+        io::stdout().write_all(&output.stderr)?;
+        Ok(())
+    }
+    exec_git_cmd(command)
 }
