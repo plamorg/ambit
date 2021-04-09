@@ -9,7 +9,11 @@ pub use parser::Parser;
 
 use std::error::Error;
 use std::fmt::{self, Display, Formatter};
-use std::iter::Peekable;
+
+use crate::{
+    directories::AmbitPath,
+    error::{AmbitError, AmbitResult},
+};
 
 #[derive(PartialEq, Eq, Debug, Clone, Copy)]
 pub enum ParseErrorType {
@@ -42,7 +46,8 @@ impl From<ParseErrorType> for ParseError {
 
 pub type ParseResult<T> = std::result::Result<T, ParseError>;
 
-pub fn get_entries<I: Iterator<Item = char>>(char_iter: Peekable<I>) -> Parser<Lexer<I>> {
-    let lex = Lexer::new(char_iter);
-    Parser::new(lex.peekable())
+pub fn get_entries(config_path: &AmbitPath) -> AmbitResult<Vec<Entry>> {
+    Parser::new(Lexer::new(config_path.as_string()?.chars().peekable()).peekable())
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(AmbitError::Parse)
 }

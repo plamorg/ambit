@@ -156,9 +156,10 @@ fn clone_repo_already_exists() {
 fn sync_without_repo() {
     // Error should occur if attempting to sync without initializing.
     // `with_repo_path` is omitted here.
-    AmbitTester::default().arg("sync").assert().stderr(
-        "ERROR: Dotfile repository does not exist. Run `init` or `clone` before syncing.\n",
-    );
+    AmbitTester::default()
+        .arg("sync")
+        .assert()
+        .stderr("ERROR: Dotfile repository does not exist. Run `init` or `clone`.\n");
 }
 
 #[test]
@@ -202,22 +203,17 @@ fn sync_normal() {
 }
 
 #[test]
-fn sync_move_normal() {
+fn move_normal() {
     let temp_dir = TempDir::new().unwrap();
     AmbitTester::from_temp_dir(&temp_dir)
         .with_repo_path()
         .with_config("repo.txt => host.txt;")
         .with_host_file("host.txt")
-        .args(vec!["sync", "-m"])
+        .arg("move")
         .assert()
         .success();
-    // The new `repo.txt` should now exist
+    // The new `repo.txt` should now exist.
     assert!(temp_dir.path().join("repo").join("repo.txt").exists());
-    // The symlink should still succeed
-    assert!(is_symlinked(
-        temp_dir.path().join("host.txt"),
-        temp_dir.path().join("repo").join("repo.txt")
-    ));
 }
 
 #[test]
@@ -252,7 +248,7 @@ fn sync_creates_host_parent_directories() {
 }
 
 #[test]
-fn sync_use_repo_config_option() {
+fn sync_use_nested_repo_config() {
     // If --use-repo-config flag is passed, recursively search for configuration in repository and use that.
     let temp_dir = TempDir::new().unwrap();
     // Set repo_config_path to /a/b/config.ambit to ensure recursive search works.
@@ -265,29 +261,8 @@ fn sync_use_repo_config_option() {
     AmbitTester::from_temp_dir(&temp_dir)
         .with_repo_file("repo.txt")
         .with_file_with_content(&repo_config_path, "repo.txt => host.txt;")
-        .args(vec!["sync", "--use-repo-config"])
-        .write_stdin("Y") // 'Y' should be synonymous to 'y'
-        .assert()
-        .success();
-    assert!(is_symlinked(
-        temp_dir.path().join("host.txt"),
-        temp_dir.path().join("repo").join("repo.txt"),
-    ));
-}
-
-#[test]
-fn sync_with_missing_config_answer_yes() {
-    // Sync without existing configuration file and answer yes to use repo configuration instead.
-    let temp_dir = TempDir::new().unwrap();
-    let repo_config_path = temp_dir.path().join("repo").join("config.ambit");
-    AmbitTester::from_temp_dir(&temp_dir)
-        .with_repo_file("repo.txt")
-        .with_file_with_content(&repo_config_path, "repo.txt => host.txt;")
         .arg("sync")
-        // Answer 'y' twice:
-        // 1. Accept to search for configuration.
-        // 2. Accept to use repo config that was found.
-        .write_stdin("y\ny")
+        .write_stdin("Y\nY") // 'Y' should be synonymous to 'y'
         .assert()
         .success();
     assert!(is_symlinked(
@@ -307,7 +282,7 @@ fn sync_with_missing_config_answer_no() {
         .arg("sync")
         .write_stdin("n")
         .assert()
-        .success();
+        .failure();
     // Should not be symlinked.
     assert!(!is_symlinked(
         temp_dir.path().join("host.txt"),
@@ -316,17 +291,13 @@ fn sync_with_missing_config_answer_no() {
 }
 
 #[test]
-fn sync_use_repo_config_if_required() {
-    // Sync without existing configuration file and answer yes to use repo configuration instead.
+fn sync_force() {
     let temp_dir = TempDir::new().unwrap();
-    let repo_config_path = temp_dir.path().join("repo").join("config.ambit");
+    let repo_path = temp_dir.path().join("repo");
     AmbitTester::from_temp_dir(&temp_dir)
         .with_repo_file("repo.txt")
-        .with_file_with_content(&repo_config_path, "repo.txt => host.txt;")
-        .args(vec!["sync", "--use-repo-config-if-required"])
-        // Only need to input 'y' once as --use-repo-config-if-required means that it will always
-        // search for repo config if config in default location does not exist.
-        .write_stdin("y")
+        .with_file_with_content(&repo_path.join("config.ambit"), "repo.txt => host.txt;")
+        .args(vec!["sync", "-f"])
         .assert()
         .success();
     assert!(is_symlinked(
@@ -336,37 +307,14 @@ fn sync_use_repo_config_if_required() {
 }
 
 #[test]
-fn sync_use_any_repo_config_found() {
+fn sync_without_force() {
     let temp_dir = TempDir::new().unwrap();
     let repo_path = temp_dir.path().join("repo");
     AmbitTester::from_temp_dir(&temp_dir)
         .with_repo_file("repo.txt")
         .with_file_with_content(&repo_path.join("config.ambit"), "repo.txt => host.txt;")
-        .args(vec!["sync", "--use-any-repo-config-found"])
-        // With --use-any-repo-config-found flag, only one 'y' needs to be passed
-        .write_stdin("y")
-        .assert()
-        .success();
-    assert!(is_symlinked(
-        temp_dir.path().join("host.txt"),
-        temp_dir.path().join("repo").join("repo.txt"),
-    ));
-}
-
-#[test]
-fn sync_use_any_repo_config_found_if_required() {
-    let temp_dir = TempDir::new().unwrap();
-    let repo_path = temp_dir.path().join("repo");
-    AmbitTester::from_temp_dir(&temp_dir)
-        .with_repo_file("repo.txt")
-        .with_file_with_content(&repo_path.join("config.ambit"), "repo.txt => host.txt;")
-        // Combine flags --use-any-repo-config-found and --use-repo-config-if-required.
-        // This should mean that nothing has to be written to stdin.
-        .args(vec![
-            "sync",
-            "--use-any-repo-config-found",
-            "--use-repo-config-if-required",
-        ])
+        .arg("sync")
+        .write_stdin("y\ny")
         .assert()
         .success();
     assert!(is_symlinked(
