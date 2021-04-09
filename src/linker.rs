@@ -31,7 +31,11 @@ fn is_symlinked(link_name: &Path, target: &Path) -> bool {
 }
 
 // Return a vector of PathBufs that match a pattern relative to the given start_path.
-fn get_paths_from_spec(spec: &Spec, start_path: PathBuf) -> AmbitResult<Vec<PathBuf>> {
+fn get_paths_from_spec(
+    spec: &Spec,
+    start_path: PathBuf,
+    allow_pattern: bool,
+) -> AmbitResult<Vec<PathBuf>> {
     let mut paths: Vec<PathBuf> = Vec::new();
     for entry in spec.into_iter() {
         if !entry.contains('*') && !entry.contains('?') {
@@ -39,6 +43,11 @@ fn get_paths_from_spec(spec: &Spec, start_path: PathBuf) -> AmbitResult<Vec<Path
             // This is a definitive path so we can simply push it.
             paths.push(PathBuf::from(&entry));
         } else {
+            if !allow_pattern {
+                return Err(AmbitError::Other(
+                    "Found unexpected pattern character.".to_owned(),
+                ));
+            }
             // The only valid path at the start is the starting path.
             // This will be replaced at every iteration/depth.
             let mut valid_paths: Vec<PathBuf> = vec![start_path.clone()];
@@ -303,11 +312,12 @@ impl Linker {
     ) -> AmbitResult<Vec<(AmbitPath, AmbitPath)>> {
         // Only search left paths from repo.
         let left_paths =
-            get_paths_from_spec(&entry.left, PathBuf::from(self.paths.repo.to_str()?))?;
+            get_paths_from_spec(&entry.left, PathBuf::from(self.paths.repo.to_str()?), true)?;
         let right_paths = if let Some(entry_right) = &entry.right {
             Some(get_paths_from_spec(
                 &entry_right,
                 PathBuf::from(self.paths.home.to_str()?),
+                false,
             )?)
         } else {
             // The right entry does not exist. Treat the left entry as both the repo and host paths.
@@ -368,7 +378,7 @@ mod tests {
             }
             File::create(path).unwrap();
         }
-        let paths = get_paths_from_spec(&spec, dir_path).unwrap();
+        let paths = get_paths_from_spec(&spec, dir_path, true).unwrap();
         // Assert that there are no duplicates as they would be removed when collected into a HashSet.
         assert_eq!(paths.len(), expected_paths.len());
         let paths: HashSet<&PathBuf> = paths.iter().collect();
