@@ -159,27 +159,23 @@ impl Linker {
         let mut symlink_pairs = Vec::new();
         for entry in config::get_entries(&config_path)? {
             for (repo_file, host_file) in self.get_ambit_paths_from_entry(&entry)? {
+                if !repo_file.exists() {
+                    return Err(AmbitError::Other(format!(
+                        "Repository file {} must exist to be synced. Consider using `move`.",
+                        repo_file.path.display()
+                    )));
+                }
                 // Only push into symlink_pairs if it hasn't been symlinkd already.
                 if !is_symlinked(&host_file.path, &repo_file.path) {
+                    if host_file.exists() {
+                        return Err(AmbitError::Other(format!(
+                            "Host file {} already exists and is not correctly symlinked.",
+                            host_file.path.display()
+                        )));
+                    }
                     symlink_pairs.push((repo_file, host_file));
                 }
                 total += 1;
-            }
-        }
-        for (repo_file, host_file) in &symlink_pairs {
-            if !repo_file.exists() {
-                return Err(AmbitError::Other(format!(
-                    "Repository file {} must exist to be synced. Consider using `move`.",
-                    repo_file.path.display()
-                )));
-            }
-            // symlink_pairs only contains pairs of paths that aren't already symlinked.
-            // This means that if host_file exists at this point, it isn't correctly symlinked.
-            if host_file.exists() {
-                return Err(AmbitError::Other(format!(
-                    "Host file {} already exists and is not correctly symlinked.",
-                    host_file.path.display()
-                )));
             }
         }
         for (repo_file, host_file) in &symlink_pairs {
