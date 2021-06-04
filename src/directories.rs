@@ -3,23 +3,45 @@ use std::{
     env,
     fs::{self, File},
     io::Read,
+    ops::Deref,
     path::PathBuf,
 };
 
-use ambit::error::{AmbitError, AmbitResult};
+use crate::error::{AmbitError, AmbitResult};
 
 pub const CONFIG_NAME: &str = "config.ambit";
 
-#[derive(PartialEq, Eq, Debug)]
+#[derive(PartialEq, Eq, Debug, Clone)]
 pub enum AmbitPathKind {
     File,
     Directory,
 }
 
-#[derive(PartialEq, Eq, Debug)]
+#[derive(PartialEq, Eq, Debug, Clone)]
 pub struct AmbitPath {
     pub path: PathBuf,
     kind: AmbitPathKind,
+}
+
+impl From<&PathBuf> for AmbitPath {
+    fn from(path: &PathBuf) -> Self {
+        let kind = if path.is_file() {
+            AmbitPathKind::File
+        } else {
+            AmbitPathKind::Directory
+        };
+        Self {
+            path: path.to_path_buf(),
+            kind,
+        }
+    }
+}
+
+impl Deref for AmbitPath {
+    type Target = PathBuf;
+    fn deref(&self) -> &Self::Target {
+        &self.path
+    }
 }
 
 impl AmbitPath {
@@ -78,6 +100,7 @@ impl AmbitPath {
     pub fn create(&self) -> AmbitResult<()> {
         match self.kind {
             AmbitPathKind::File => {
+                self.ensure_parent_dirs_exist()?;
                 File::create(&self.path)?;
             }
             AmbitPathKind::Directory => {
@@ -96,6 +119,7 @@ impl AmbitPath {
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct AmbitPaths {
     pub home: AmbitPath,
     pub config: AmbitPath,
@@ -129,10 +153,7 @@ impl AmbitPaths {
 
     // Attempt to fetch path from env if set
     fn get_path_from_env(key: &str) -> Option<PathBuf> {
-        match env::var_os(key) {
-            Some(path) => Some(PathBuf::from(path)),
-            None => None,
-        }
+        env::var_os(key).map(PathBuf::from)
     }
 }
 

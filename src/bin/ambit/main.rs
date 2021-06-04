@@ -1,11 +1,13 @@
-mod cmd;
-mod directories;
-
 use clap::{App, AppSettings, Arg, SubCommand};
 
 use std::process;
 
-use ambit::error::{self, AmbitResult};
+use ambit::{
+    cmd,
+    directories::AMBIT_PATHS,
+    error::{self, AmbitResult},
+    linker::{self, Linker},
+};
 
 // Return instance of ambit application
 fn get_app() -> App<'static, 'static> {
@@ -13,6 +15,16 @@ fn get_app() -> App<'static, 'static> {
         .short("f")
         .long("force")
         .help("Overwrite currently initialized dotfile repository");
+    let linker_args = &[
+        force_arg.clone(),
+        Arg::with_name("dry-run")
+            .long("dry-run")
+            .help("If set, do not actually symlink the files"),
+        Arg::with_name("quiet")
+            .long("quiet")
+            .short("q")
+            .help("Don't report individual symlinks"),
+    ];
 
     App::new("ambit")
         .about("Dotfile manager")
@@ -38,43 +50,17 @@ fn get_app() -> App<'static, 'static> {
         .subcommand(
             SubCommand::with_name("sync")
                 .about("Sync files in dotfile repository to system through symbolic links")
-                .arg(
-                    Arg::with_name("dry-run")
-                        .long("dry-run")
-                        .help("If set, do not actually symlink the files"),
-                )
-                .arg(
-                    Arg::with_name("quiet")
-                        .long("quiet")
-                        .short("q")
-                        .help("Don't report individual symlinks"),
-                )
-                .arg(
-                    Arg::with_name("move")
-                        .long("move")
-                        .short("m")
-                        .help("Move host files into dotfile repository if needed")
-                        .long_help("Will automatically move host files into repository if they don't already exist in the repository and then symlink them"),
-                )
-                .arg(
-                    Arg::with_name("use-repo-config")
-                    .long("use-repo-config")
-                    .help("Recursively search dotfile repository for configuration file and use it to sync")
-                )
-                .arg(
-                    Arg::with_name("use-repo-config-if-required")
-                    .long("use-repo-config-if-required")
-                    .help("Search for configuration file in dotfile repository if configuration in default location does not exist")
-                )
-                .arg(
-                    Arg::with_name("use-any-repo-config-found")
-                    .long("use-any-repo-config-found")
-                    .help("Use first repository configuration found after recursive search")
-                )
+                .args(linker_args),
         )
         .subcommand(
             SubCommand::with_name("clean")
-            .about("Remove all symlinks and delete host files")
+                .about("Remove all symlinks and delete host files")
+                .args(linker_args),
+        )
+        .subcommand(
+            SubCommand::with_name("move")
+                .about("Move host files into dotfile repository if needed")
+                .args(linker_args),
         )
         .subcommand(SubCommand::with_name("check").about("Check ambit configuration for errors"))
 }
@@ -95,23 +81,26 @@ fn run() -> AmbitResult<()> {
         cmd::git(git_arguments)?;
     } else if matches.is_present("check") {
         cmd::check()?;
-    } else if let Some(matches) = matches.subcommand_matches("sync") {
-        let dry_run = matches.is_present("dry-run");
-        let quiet = matches.is_present("quiet");
-        let move_files = matches.is_present("move");
-        let use_repo_config = matches.is_present("use-repo-config");
-        let use_repo_config_if_required = matches.is_present("use-repo-config-if-required");
-        let use_any_repo_config = matches.is_present("use-any-repo-config-found");
-        cmd::sync(
-            dry_run,
-            quiet,
-            move_files,
-            use_repo_config,
-            use_repo_config_if_required,
-            use_any_repo_config,
-        )?;
-    } else if matches.is_present("clean") {
-        cmd::clean()?;
+    } else {
+        type LinkerAction = fn(&Linker) -> AmbitResult<()>;
+        let linker_commands: &[(&str, LinkerAction)] = &[
+            ("sync", Linker::sync_paths),
+            ("move", Linker::move_paths),
+            ("clean", Linker::clean_paths),
+        ];
+        // Iterate through sync, move, and clean commands and execute corresponding function.
+        for (subcommand, func) in linker_commands {
+            if let Some(matches) = matches.subcommand_matches(subcommand) {
+                let options = linker::Options {
+                    force: matches.is_present("force"),
+                    dry_run: matches.is_present("dry-run"),
+                    quiet: matches.is_present("quiet"),
+                };
+                let linker = Linker::new(&AMBIT_PATHS, options)?;
+                func(&linker)?;
+                break;
+            }
+        }
     }
     Ok(())
 }
@@ -157,10 +146,9 @@ mod tests {
     #[test]
     fn git_arguments_with_hyphen() {
         let matches = arguments_list!("git", "status", "-v", "--short");
-        let git_arguments: Option<Vec<_>> = match matches.subcommand_matches("git") {
-            Some(matches) => Some(matches.values_of("GIT_ARGUMENTS").unwrap().collect()),
-            None => None,
-        };
+        let git_arguments: Option<Vec<_>> = matches
+            .subcommand_matches("git")
+            .map(|matches| matches.values_of("GIT_ARGUMENTS").unwrap().collect());
         assert_eq!(git_arguments, Some(vec!["status", "-v", "--short"]));
     }
 
