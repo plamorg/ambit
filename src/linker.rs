@@ -6,6 +6,7 @@ use crate::{
     error::{AmbitError, AmbitResult},
 };
 use patmatch::{MatchOptions, Pattern};
+// Allow symlink to be executed with same function name.
 #[cfg(unix)]
 use std::os::unix::fs::symlink;
 #[cfg(windows)]
@@ -51,10 +52,18 @@ fn get_paths_from_spec(
             // The only valid path at the start is the starting path.
             // This will be replaced at every iteration/depth.
             let mut valid_paths: Vec<PathBuf> = vec![start_path.clone()];
-            let components: Vec<_> = Path::new(&entry)
+            let components: Result<Vec<_>, _> = Path::new(&entry)
                 .components()
-                .map(|comp| comp.as_os_str().to_string_lossy())
+                .map(|comp| {
+                    comp.as_os_str().to_str().ok_or_else(|| {
+                        AmbitError::Other(format!(
+                            "The path \"{}\" contains non-UTF8 characters.",
+                            entry
+                        ))
+                    })
+                })
                 .collect();
+            let components = components?;
             // To find matching files and directories, an entry as part of the spec is split into components.
             // For each component, a pattern is compiled and a vector of paths that match this pattern is found.
             // With the vector produced from the previous component, the process is repeated with the ancestor paths equal to the said vector.
@@ -118,30 +127,26 @@ impl Linker {
         }
     }
 
+    // Remove all symlinked host files.
     pub fn clean_paths(&self) -> AmbitResult<()> {
-        let config_path = self.find_config_path(self.options.force)?;
-        let entries = config::get_entries(&config_path)?;
         let mut total_syncs: usize = 0;
         let mut deletions: usize = 0;
-        for entry in entries {
-            let paths = self.get_ambit_paths_from_entry(&entry)?;
-            for (repo_file, host_file) in paths {
-                if is_symlinked(&host_file.path, &repo_file.path) {
-                    if !self.options.dry_run {
-                        host_file.remove()?;
-                    }
+        for (repo_file, host_file) in self.get_paths_from_config()? {
+            if is_symlinked(&host_file.path, &repo_file.path) {
+                if !self.options.dry_run {
+                    host_file.remove()?;
                     deletions += 1;
-                    if !self.options.quiet {
-                        let action = if self.options.dry_run {
-                            "Ignored"
-                        } else {
-                            "Removed"
-                        };
-                        println!("{} {}", action, host_file.path.display());
-                    }
                 }
-                total_syncs += 1;
+                if !self.options.quiet {
+                    let action = if self.options.dry_run {
+                        "Ignored"
+                    } else {
+                        "Removed"
+                    };
+                    println!("{} {}", action, host_file.path.display());
+                }
             }
+            total_syncs += 1;
         }
         // Final clean metrics.
         println!(
@@ -153,37 +158,33 @@ impl Linker {
         Ok(())
     }
 
+    // Symlink host files to corresponding repo files.
     pub fn sync_paths(&self) -> AmbitResult<()> {
         let mut total: usize = 0;
-        let config_path = self.find_config_path(self.options.force)?;
         let mut symlink_pairs = Vec::new();
-        for entry in config::get_entries(&config_path)? {
-            for (repo_file, host_file) in self.get_ambit_paths_from_entry(&entry)? {
-                if !repo_file.exists() {
+        for (repo_file, host_file) in self.get_paths_from_config()? {
+            if !repo_file.exists() {
+                return Err(AmbitError::Other(format!(
+                    "Repository file {} must exist to be synced. Consider using `move`.",
+                    repo_file.path.display()
+                )));
+            }
+            // Only push into symlink_pairs if the file hasn't been symlinked already.
+            if !is_symlinked(&host_file.path, &repo_file.path) {
+                if host_file.exists() {
                     return Err(AmbitError::Other(format!(
-                        "Repository file {} must exist to be synced. Consider using `move`.",
-                        repo_file.path.display()
+                        "Host file {} already exists and is not correctly symlinked.",
+                        host_file.path.display()
                     )));
                 }
-                // Only push into symlink_pairs if it hasn't been symlinkd already.
-                if !is_symlinked(&host_file.path, &repo_file.path) {
-                    if host_file.exists() {
-                        return Err(AmbitError::Other(format!(
-                            "Host file {} already exists and is not correctly symlinked.",
-                            host_file.path.display()
-                        )));
-                    }
-                    symlink_pairs.push((repo_file, host_file));
-                }
-                total += 1;
+                symlink_pairs.push((repo_file, host_file));
             }
+            total += 1;
         }
         for (repo_file, host_file) in &symlink_pairs {
             if !self.options.dry_run {
                 host_file.ensure_parent_dirs_exist()?;
-                // Attempt to symlink.
                 if let Err(e) = symlink(&repo_file.path, &host_file.path) {
-                    // Symlink went wrong
                     return Err(AmbitError::Sync {
                         host_file_path: PathBuf::from(&host_file.path),
                         repo_file_path: PathBuf::from(&repo_file.path),
@@ -220,32 +221,31 @@ impl Linker {
         Ok(())
     }
 
+    // Move existing host files to corresponding non-existing repo files.
     pub fn move_paths(&self) -> AmbitResult<()> {
         let mut total: usize = 0;
         let mut total_moved: usize = 0;
-        let config_path = self.find_config_path(self.options.force)?;
-        for entry in config::get_entries(&config_path)? {
-            for (repo_file, host_file) in self.get_ambit_paths_from_entry(&entry)? {
-                total += 1;
-                if !repo_file.exists() && host_file.exists() {
-                    if !self.options.dry_run {
-                        total_moved += 1;
-                        fs::rename(host_file.as_path(), repo_file.as_path())?;
-                    }
-                    if !self.options.quiet {
-                        let action = if self.options.dry_run {
-                            "Ignored moving"
-                        } else {
-                            "Moved"
-                        };
-                        println!(
-                            "{} {} to {}",
-                            action,
-                            host_file.display(),
-                            repo_file.display()
-                        );
-                    }
-                }
+        for (repo_file, host_file) in self.get_paths_from_config()? {
+            let moveable = !repo_file.exists() && host_file.exists();
+            total += 1;
+            if moveable && !self.options.dry_run {
+                total_moved += 1;
+                fs::rename(host_file.as_path(), repo_file.as_path())?;
+            }
+            if !self.options.quiet {
+                let action = if self.options.dry_run {
+                    "Ignored moving"
+                } else if !moveable {
+                    "Ignored moving (already synced)"
+                } else {
+                    "Moved"
+                };
+                println!(
+                    "{} {} to {}",
+                    action,
+                    host_file.display(),
+                    repo_file.display()
+                );
             }
         }
         // Final moved metrics.
@@ -285,15 +285,16 @@ impl Linker {
     // Recursively search dotfile repository for config path.
     fn get_repo_config_paths(&self, stop_at_first_found: bool) -> Vec<PathBuf> {
         let mut repo_config_paths = Vec::new();
-        for dir_entry in WalkDir::new(self.paths.repo.as_path()) {
-            if let Ok(dir_entry) = dir_entry {
-                let path = dir_entry.path();
-                if let Some(file_name) = path.file_name() {
-                    if file_name == directories::CONFIG_NAME {
-                        repo_config_paths.push(path.to_path_buf());
-                        if stop_at_first_found {
-                            break;
-                        }
+        for dir_entry in WalkDir::new(self.paths.repo.as_path())
+            .into_iter()
+            .flatten()
+        {
+            let path = dir_entry.path();
+            if let Some(file_name) = path.file_name() {
+                if file_name == directories::CONFIG_NAME {
+                    repo_config_paths.push(path.to_path_buf());
+                    if stop_at_first_found {
+                        break;
                     }
                 }
             }
@@ -301,11 +302,20 @@ impl Linker {
         repo_config_paths
     }
 
+    fn get_paths_from_config(&self) -> AmbitResult<Vec<(AmbitPath, AmbitPath)>> {
+        Ok(
+            config::get_entries(&self.find_config_path(self.options.force)?)?
+                .into_iter()
+                // Flatten results.
+                .flat_map(|entry| self.get_paths_from_entry(&entry))
+                // Flatten vectors.
+                .flatten()
+                .collect(),
+        )
+    }
+
     // Return vector over path pairs in the form of `(repo_file, host_file)` from given entry.
-    fn get_ambit_paths_from_entry(
-        &self,
-        entry: &Entry,
-    ) -> AmbitResult<Vec<(AmbitPath, AmbitPath)>> {
+    fn get_paths_from_entry(&self, entry: &Entry) -> AmbitResult<Vec<(AmbitPath, AmbitPath)>> {
         // Only search left paths from repo.
         let left_paths =
             get_paths_from_spec(&entry.left, PathBuf::from(self.paths.repo.to_str()?), true)?;

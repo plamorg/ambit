@@ -153,10 +153,7 @@ impl AmbitPaths {
 
     // Attempt to fetch path from env if set
     fn get_path_from_env(key: &str) -> Option<PathBuf> {
-        match env::var_os(key) {
-            Some(path) => Some(PathBuf::from(path)),
-            None => None,
-        }
+        env::var_os(key).map(PathBuf::from)
     }
 }
 

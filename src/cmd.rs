@@ -10,8 +10,9 @@ use std::{
 };
 
 // Initialize config and repository directory
-fn ensure_repo_exists(force: bool) -> AmbitResult<()> {
-    if AMBIT_PATHS.repo.exists()
+fn ensure_no_repo_conflicts(force: bool) -> AmbitResult<()> {
+    let repo_exists = AMBIT_PATHS.repo.exists();
+    if repo_exists
         // No need to prompt if force is true.
         && !force
         // Ask user if they want to overwrite.
@@ -20,7 +21,7 @@ fn ensure_repo_exists(force: bool) -> AmbitResult<()> {
         return Err(AmbitError::Other(
             "Dotfile repository already exists.\nUse '-f' flag to overwrite.".to_owned(),
         ));
-    } else if AMBIT_PATHS.repo.exists() {
+    } else if repo_exists {
         // Remove if either force is enabled or if the user confirmed to overwrite.
         AMBIT_PATHS.repo.remove()?;
     }
@@ -38,10 +39,7 @@ pub fn prompt_confirm(message: &str) -> AmbitResult<bool> {
 
 // Initialize an empty dotfile repository
 pub fn init(force: bool) -> AmbitResult<()> {
-    if !AMBIT_PATHS.config.exists() {
-        AMBIT_PATHS.config.create()?;
-    }
-    ensure_repo_exists(force)?;
+    ensure_no_repo_conflicts(force)?;
     AMBIT_PATHS.repo.create()?;
     // Initialize an empty git repository
     git(vec!["init"])?;
@@ -49,13 +47,13 @@ pub fn init(force: bool) -> AmbitResult<()> {
 }
 
 // Clone an existing dotfile repository with given origin
-pub fn clone(force: bool, arguments: Vec<&str>) -> AmbitResult<()> {
-    ensure_repo_exists(force)?;
+pub fn clone(force: bool, clone_arguments: Vec<&str>) -> AmbitResult<()> {
+    ensure_no_repo_conflicts(force)?;
     // Clone will handle creating the repository directory
     let repo_path = AMBIT_PATHS.repo.to_str()?;
     let status = Command::new("git")
         .arg("clone")
-        .args(arguments)
+        .args(clone_arguments)
         .args(vec!["--", repo_path])
         .status()?;
     match status.success() {
@@ -74,7 +72,7 @@ pub fn check() -> AmbitResult<()> {
 }
 
 // Run git commands from the dotfile repository
-pub fn git(arguments: Vec<&str>) -> AmbitResult<()> {
+pub fn git(git_arguments: Vec<&str>) -> AmbitResult<()> {
     // The path to repository (git-dir) and the working tree (work-tree) is
     // passed to ensure that git commands are run from the dotfile repository
     let mut command = Command::new("git");
@@ -82,10 +80,10 @@ pub fn git(arguments: Vec<&str>) -> AmbitResult<()> {
         ["--git-dir=", AMBIT_PATHS.git.to_str()?].concat(),
         ["--work-tree=", AMBIT_PATHS.repo.to_str()?].concat(),
     ]);
-    command.args(arguments);
+    command.args(git_arguments);
     // Conditional compilation so that this still compiles on Windows.
     #[cfg(unix)]
-    fn exec_git_cmd(mut command: Command) -> AmbitResult<()> {
+    fn exec_git_command(mut command: Command) -> AmbitResult<()> {
         use std::os::unix::process::CommandExt;
         // Try to replace this process with the `git` process.
         // This is to allow stuff like terminal colors.
@@ -94,12 +92,12 @@ pub fn git(arguments: Vec<&str>) -> AmbitResult<()> {
         Err(AmbitError::Io(command.exec()))
     }
     #[cfg(not(unix))]
-    fn exec_git_cmd(mut command: Command) -> AmbitResult<()> {
+    fn exec_git_command(mut command: Command) -> AmbitResult<()> {
         // Not easy to do this on other systems, just use defaults
         let output = command.output()?;
         io::stdout().write_all(&output.stdout)?;
         io::stdout().write_all(&output.stderr)?;
         Ok(())
     }
-    exec_git_cmd(command)
+    exec_git_command(command)
 }

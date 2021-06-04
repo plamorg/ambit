@@ -267,10 +267,7 @@ impl MatchExpr {
     fn raw_iter(&self) -> MatchIter {
         MatchIter {
             expr: &self,
-            spec_iter: match self.resolve() {
-                Some(spec) => Some(spec.raw_iter()),
-                None => None,
-            },
+            spec_iter: self.resolve().map(|spec| spec.raw_iter()),
         }
     }
 }

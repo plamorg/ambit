@@ -93,7 +93,7 @@ impl MatchExpr {
     }
 }
 
-// A comma seperated list of `T`s, with optional trailing comma.
+// A comma separated list of `T`s, with optional trailing comma.
 // (The delimiters are passed to the parse() function.)
 #[derive(PartialEq, Eq, Debug, Clone)]
 pub struct CommaList<T: SimpleParse> {

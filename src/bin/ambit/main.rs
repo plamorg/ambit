@@ -88,6 +88,7 @@ fn run() -> AmbitResult<()> {
             ("move", Linker::move_paths),
             ("clean", Linker::clean_paths),
         ];
+        // Iterate through sync, move, and clean commands and execute corresponding function.
         for (subcommand, func) in linker_commands {
             if let Some(matches) = matches.subcommand_matches(subcommand) {
                 let options = linker::Options {
@@ -145,10 +146,9 @@ mod tests {
     #[test]
     fn git_arguments_with_hyphen() {
         let matches = arguments_list!("git", "status", "-v", "--short");
-        let git_arguments: Option<Vec<_>> = match matches.subcommand_matches("git") {
-            Some(matches) => Some(matches.values_of("GIT_ARGUMENTS").unwrap().collect()),
-            None => None,
-        };
+        let git_arguments: Option<Vec<_>> = matches
+            .subcommand_matches("git")
+            .map(|matches| matches.values_of("GIT_ARGUMENTS").unwrap().collect());
         assert_eq!(git_arguments, Some(vec!["status", "-v", "--short"]));
     }
 
